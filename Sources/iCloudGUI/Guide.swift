@@ -54,7 +54,7 @@ struct GuideSheet: View {
 
     private var header: some View {
         HStack(spacing: 14) {
-            Image(systemName: "photo.on.rectangle.angled")
+            Image(systemName: "icloud.and.arrow.down")
                 .font(.system(size: 34)).foregroundStyle(.tint)
             VStack(alignment: .leading, spacing: 3) {
                 Text(isFirstRun ? "Welcome to iCloud GUI" : "iCloud GUI Guide")

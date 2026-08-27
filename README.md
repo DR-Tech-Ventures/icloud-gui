@@ -1,7 +1,11 @@
+<img src="docs/icon.png" width="120" alt="">
+
 # iCloud GUI
 
 A small macOS app to browse your iCloud Photos library and download originals to a
 local folder or a mounted NAS share.
+
+**No Apple ID password. Works with Advanced Data Protection enabled.**
 
 ## Why it works this way
 

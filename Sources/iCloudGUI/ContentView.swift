@@ -360,7 +360,7 @@ struct PermissionView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Image(systemName: "photo.on.rectangle.angled")
+            Image(systemName: "icloud.and.arrow.down")
                 .font(.system(size: 52)).foregroundStyle(.tint)
             Text("iCloud GUI needs access to your Photos library")
                 .font(.title2).bold()
