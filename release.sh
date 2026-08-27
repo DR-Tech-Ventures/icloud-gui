@@ -63,14 +63,10 @@ fi
 
 # --- Build -----------------------------------------------------------------
 echo "==> Building"
-swift build -c release
-BIN="$(swift build -c release --show-bin-path)/iCloudGUI"
-
-rm -rf "$APP" "$SUBMIT_ZIP" "$DIST_ZIP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/iCloudGUI"
-# Reuse the Info.plist that build.sh writes, so the two cannot drift.
-BUNDLE_ID="$BUNDLE_ID" ./build.sh release >/dev/null
+rm -f "$SUBMIT_ZIP" "$DIST_ZIP"
+# build.sh owns bundle assembly and the Info.plist, so the two cannot drift. It also
+# signs with the local identity; the Developer ID signature below replaces that.
+BUNDLE_ID="$BUNDLE_ID" ./build.sh release
 
 # --- Sign ------------------------------------------------------------------
 # --options runtime IS correct here, unlike in build.sh's local signing paths:
