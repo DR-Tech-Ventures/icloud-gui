@@ -135,7 +135,12 @@ tccutil reset Photos com.drtechventures.icloudgui
 
 Bug reports and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for
 setup, the diagnostic flags, and a list of the Apple restrictions that look like bugs
-but are not. Licensed under [MIT](LICENSE).
+but are not. Please also read the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+Security issues should go to admin@drtechventures.com rather than a public issue —
+see [SECURITY.md](SECURITY.md).
+
+Licensed under the [Apache License 2.0](LICENSE).
 
 ## Self-check
 
