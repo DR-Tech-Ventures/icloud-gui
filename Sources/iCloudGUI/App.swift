@@ -10,6 +10,7 @@ struct iCloudGUIApp: App {
         if CommandLine.arguments.contains("--hidden") { Probe.hidden() }
         if CommandLine.arguments.contains("--extras") { Probe.extras() }
         if CommandLine.arguments.contains("--size") { Probe.size() }
+        Demo.enabled = CommandLine.arguments.contains("--demo")
         Shot.arm()
     }
 

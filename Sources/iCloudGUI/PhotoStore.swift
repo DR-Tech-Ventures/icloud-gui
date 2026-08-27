@@ -198,8 +198,14 @@ final class PhotoStore: NSObject, ObservableObject {
                 let count = PHAsset.fetchAssets(in: collection, options: nil).count
                 guard count > 0 else { return }
                 let isShared = collection.assetCollectionSubtype == .albumCloudShared
+                let realTitle = collection.localizedTitle ?? "Untitled"
+                let shownTitle = Demo.enabled
+                    ? Demo.albumName(realTitle,
+                                     index: isShared ? shared.count : mine.count,
+                                     shared: isShared)
+                    : realTitle
                 let album = Album(id: collection.localIdentifier,
-                                  title: collection.localizedTitle ?? "Untitled",
+                                  title: shownTitle,
                                   count: count,
                                   symbol: isShared ? "person.2" : "rectangle.stack",
                                   collection: collection,
@@ -302,6 +308,9 @@ final class PhotoStore: NSObject, ObservableObject {
     // MARK: - Thumbnails
 
     func thumbnail(for asset: PHAsset, size: CGFloat) async -> NSImage? {
+        if Demo.enabled {
+            return Demo.thumbnail(seed: asset.localIdentifier, size: size)
+        }
         let options = PHImageRequestOptions()
         options.deliveryMode = .opportunistic
         options.resizeMode = .fast

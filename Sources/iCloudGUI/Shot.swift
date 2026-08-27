@@ -4,6 +4,11 @@ import Foundation
 /// Debug: render our own window to a PNG. Needs no Screen Recording permission,
 /// because an app may always draw its own views.
 /// Usage:  open "build/iCloud GUI.app" --args --shot 960x640
+extension Notification.Name {
+    static let selectAlbumForShot = Notification.Name("com.local.icloudgui.selectAlbumForShot")
+    static let setGroupingForShot = Notification.Name("com.local.icloudgui.setGroupingForShot")
+}
+
 enum Shot {
     static func arm() {
         let args = CommandLine.arguments
@@ -11,6 +16,23 @@ enum Shot {
         let size = i + 1 < args.count ? parse(args[i + 1]) : nil
         let out = URL(fileURLWithPath: "/tmp/icg-shot.png")
 
+        // Optional: select a named album before capturing, so a screenshot can show
+        // something other than whatever loads first.
+        let wanted: String? = args.firstIndex(of: "--album").flatMap {
+            $0 + 1 < args.count ? args[$0 + 1] : nil
+        }
+        let grouping: String? = args.firstIndex(of: "--group").flatMap {
+            $0 + 1 < args.count ? args[$0 + 1] : nil
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
+            if let wanted {
+                NotificationCenter.default.post(name: .selectAlbumForShot, object: wanted)
+            }
+            if let grouping {
+                NotificationCenter.default.post(name: .setGroupingForShot, object: grouping)
+            }
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 9) {
             if args.contains("--about") { About.show() }
             guard let main = NSApp.windows.first(where: { $0.isVisible }) else { exit(3) }
@@ -39,7 +61,25 @@ enum Shot {
         guard let view = window.contentView else { exit(4) }
         let bounds = view.bounds
         guard let rep = view.bitmapImageRepForCachingDisplay(in: bounds) else { exit(5) }
-        view.cacheDisplay(in: bounds, to: rep)
+
+        // Render the layer tree rather than cacheDisplay: the latter skips AppKit
+        // control titles, so every button comes out blank.
+        if let layer = view.layer {
+            NSGraphicsContext.saveGraphicsState()
+            if let gctx = NSGraphicsContext(bitmapImageRep: rep) {
+                NSGraphicsContext.current = gctx
+                gctx.cgContext.setFillColor(NSColor.windowBackgroundColor.cgColor)
+                gctx.cgContext.fill(bounds)
+                // Core Animation's origin is top-left, AppKit's is bottom-left, so the
+                // layer tree renders upside down without this flip.
+                gctx.cgContext.translateBy(x: 0, y: bounds.height)
+                gctx.cgContext.scaleBy(x: 1, y: -1)
+                layer.render(in: gctx.cgContext)
+            }
+            NSGraphicsContext.restoreGraphicsState()
+        } else {
+            view.cacheDisplay(in: bounds, to: rep)
+        }
         guard let data = rep.representation(using: .png, properties: [:]) else { exit(6) }
         try? data.write(to: url)
         FileHandle.standardError.write("shot \(Int(bounds.width))x\(Int(bounds.height))\n".data(using: .utf8)!)

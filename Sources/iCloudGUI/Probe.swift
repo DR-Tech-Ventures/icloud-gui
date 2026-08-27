@@ -38,6 +38,14 @@ enum Probe {
             note("  \(c.localizedTitle ?? "?"): withSourceTypes=\(withOpt) default=\(without)")
         }
 
+        note("--- my albums (not shared) ---")
+        PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil)
+            .enumerateObjects { c, _, _ in
+                guard c.assetCollectionSubtype != .albumCloudShared else { return }
+                let n = PHAsset.fetchAssets(in: c, options: nil).count
+                note("  \(c.localizedTitle ?? "?"): \(n)")
+            }
+
         note("--- regular albums (subtype breakdown) ---")
         var bySubtype: [Int: Int] = [:]
         PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil)

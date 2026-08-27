@@ -38,6 +38,23 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showGuide)) { _ in
             showGuide = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .selectAlbumForShot)) { note in
+            guard let name = note.object as? String else { return }
+            // Exact match first, so "Panoramas" cannot land on some other album that
+            // merely contains the text; fall back to a substring match.
+            let album = store.albums.first { $0.title.compare(name, options: .caseInsensitive) == .orderedSame }
+                ?? store.albums.first { $0.title.localizedCaseInsensitiveContains(name) }
+            let report = album.map { "matched: \($0.title) (\($0.count))" }
+                ?? "NO MATCH for \(name); available: \(store.albums.map(\.title).joined(separator: ", "))"
+            try? report.write(to: URL(fileURLWithPath: "/tmp/icg-album-match.txt"),
+                              atomically: true, encoding: .utf8)
+            if let album { store.select(album) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .setGroupingForShot)) { note in
+            guard let raw = note.object as? String,
+                  let g = DateGrouping(rawValue: raw) else { return }
+            store.grouping = g
+        }
         .sheet(isPresented: $showGuide) {
             GuideSheet(isFirstRun: !hasSeenGuide) {
                 hasSeenGuide = true

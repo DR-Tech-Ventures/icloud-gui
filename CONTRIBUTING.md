@@ -50,6 +50,18 @@ There are diagnostic flags for the parts that need a real library. They print to
 | `--extras` | Burst frames, UUID filenames, favourites, locations. |
 | `--size` | Estimated size of a full backup. |
 | `--shot 1000x700` | Renders the window to `/tmp/icg-shot.png`. Needs no Screen Recording permission. |
+| `--demo` | Generic album names and generated tiles, for screenshots. |
+| `--album <name>` | Select an album before capturing. |
+| `--group day\|month\|year` | Set the grid grouping before capturing. |
+
+**Always use `--demo` for any screenshot that will be published.** A screenshot of a
+photo app leaks twice over: the photos, and the sidebar, which lists the album names
+people give to their children, relatives and holidays. Demo mode substitutes both while
+leaving the interface, layout and live scan output real.
+
+```bash
+open "build/iCloud GUI.app" --args --demo --shot 1200x760 --album "All Photos" --group month
+```
 
 Run them like this:
 

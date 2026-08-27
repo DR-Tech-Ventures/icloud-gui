@@ -7,6 +7,11 @@ local folder or a mounted NAS share.
 
 **No Apple ID password. Works with Advanced Data Protection enabled.**
 
+![The app showing a photo library grouped by month, with a destination folder chosen](docs/screenshot.png)
+
+<sub>Screenshot taken in the app's `--demo` mode: real interface and real scan output,
+with placeholder tiles and generic album names in place of a real library.</sub>
+
 ## Why it works this way
 
 There is **no official iCloud Photos API** for third-party apps. There are two ways in:
