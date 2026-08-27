@@ -72,6 +72,11 @@ BUNDLE_ID="$BUNDLE_ID" ./build.sh release
 # --options runtime IS correct here, unlike in build.sh's local signing paths:
 # notarisation requires hardened runtime, and a Developer ID certificate carries the
 # real Team ID that TCC wants before it will show the Photos prompt.
+# release.entitlements requests com.apple.security.personal-information.photos-library,
+# the hardened-runtime Resource Access entitlement for the photo library. It is kept
+# free of XML comments on purpose: codesign parses entitlements with AMFIUnserializeXML,
+# which is stricter than plutil and rejects things plutil accepts -- a "--" inside an
+# XML comment is illegal and fails there while linting clean.
 echo "==> Signing (hardened runtime)"
 codesign --force --deep --timestamp --options runtime \
          --entitlements release.entitlements \
