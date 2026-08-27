@@ -77,6 +77,12 @@ These were each found the hard way. The comments in the code say so too.
 - **Hidden and Recently Deleted are macOS restrictions**, not missing features. Neither
   is reachable by any third-party app. Both are listed in the sidebar deliberately.
 
+## The app icon
+
+`Icon/AppIcon.icns` is generated, not hand-drawn — `Icon/make-icon.swift` draws it and
+`./Icon/make-icon.sh` regenerates the `.icns`. Committing the source rather than only a
+binary means the design can actually be edited.
+
 ## Releasing
 
 `./release.sh` handles signing, notarisation and stapling. It checks its prerequisites

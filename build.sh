@@ -17,6 +17,7 @@ echo "==> Assembling bundle"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/iCloudGUI"
+cp Icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -26,13 +27,15 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleName</key>              <string>${APP_NAME}</string>
     <key>CFBundleDisplayName</key>       <string>${APP_NAME}</string>
     <key>CFBundleExecutable</key>        <string>iCloudGUI</string>
+    <key>CFBundleIconFile</key>          <string>AppIcon</string>
     <key>CFBundleIdentifier</key>        <string>${BUNDLE_ID}</string>
     <key>CFBundlePackageType</key>       <string>APPL</string>
     <key>CFBundleShortVersionString</key><string>1.0</string>
     <key>CFBundleVersion</key>           <string>1</string>
     <key>LSMinimumSystemVersion</key>    <string>14.0</string>
     <key>NSHighResolutionCapable</key>   <true/>
-    <key>NSHumanReadableCopyright</key>  <string>Local tool</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2026 DR Tech Ventures LLC. Licensed under the Apache License 2.0.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>iCloud GUI reads your Photos library so you can pick photos and download the originals to a folder on this Mac or a NAS.</string>
 </dict>

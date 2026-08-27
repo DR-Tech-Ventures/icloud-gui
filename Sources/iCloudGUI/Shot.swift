@@ -12,9 +12,11 @@ enum Shot {
         let out = URL(fileURLWithPath: "/tmp/icg-shot.png")
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 9) {
+            if args.contains("--about") { About.show() }
             guard let main = NSApp.windows.first(where: { $0.isVisible }) else { exit(3) }
-            // A sheet is a separate child window; capture it when one is up.
-            let window = main.attachedSheet ?? main
+            // A sheet is a child window; the About panel is a separate key window.
+            let window = main.attachedSheet
+                ?? (args.contains("--about") ? (NSApp.keyWindow ?? main) : main)
             if let size, main.attachedSheet == nil {
                 window.setContentSize(size)
                 window.displayIfNeeded()

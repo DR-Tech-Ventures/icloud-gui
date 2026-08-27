@@ -20,6 +20,9 @@ struct iCloudGUIApp: App {
         .windowToolbarStyle(.unified)
         .commands {
             CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .appInfo) {
+                Button("About iCloud GUI") { About.show() }
+            }
             // Replaces the default Help item so the guide is where people look for it.
             CommandGroup(replacing: .help) {
                 Button("iCloud GUI Guide") {
