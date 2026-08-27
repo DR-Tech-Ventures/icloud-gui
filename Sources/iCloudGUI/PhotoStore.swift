@@ -38,7 +38,7 @@ struct AssetSection: Identifiable {
 }
 
 @MainActor
-final class PhotoStore: ObservableObject {
+final class PhotoStore: NSObject, ObservableObject {
     @Published var status: PHAuthorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
     @Published var albums: [Album] = []
     @Published var albumGroups: [AlbumGroup] = []
@@ -54,12 +54,36 @@ final class PhotoStore: ObservableObject {
     @Published var newestFirst = true { didSet { rebuildSections() } }
 
     private let imageManager = PHCachingImageManager()
+    /// Kept so PHChange can hand back an updated fetch result for the open album.
+    private var currentFetch: PHFetchResult<PHAsset>?
+    private var albumReloadTask: Task<Void, Never>?
+    private var observing = false
+
+    /// Bumped whenever the library changes underneath us, so the destination
+    /// analysis knows its "what is still missing" answer is stale.
+    @Published private(set) var libraryVersion = 0
+    /// Photos that appeared since this window opened.
+    @Published private(set) var arrivedSinceOpen = 0
+
+    override init() {
+        super.init()
+        if isAuthorized { startObserving() }
+    }
+
+    deinit { PHPhotoLibrary.shared().unregisterChangeObserver(self) }
+
+    func startObserving() {
+        guard !observing else { return }
+        observing = true
+        PHPhotoLibrary.shared().register(self)
+    }
 
     var isAuthorized: Bool { status == .authorized || status == .limited }
 
     func requestAccess() async {
         status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
         guard isAuthorized else { return }
+        startObserving()
         loadAlbums()
     }
 
@@ -221,6 +245,7 @@ final class PhotoStore: ObservableObject {
 
         let result = album.collection.map { PHAsset.fetchAssets(in: $0, options: options) }
             ?? PHAsset.fetchAssets(with: options)
+        currentFetch = result
 
         var loaded: [PHAsset] = []
         loaded.reserveCapacity(result.count)
@@ -293,6 +318,48 @@ final class PhotoStore: ObservableObject {
                 resumed = true
                 continuation.resume(returning: image)
             }
+        }
+    }
+}
+
+
+// MARK: - Live library updates
+
+extension PhotoStore: PHPhotoLibraryChangeObserver {
+    /// Called on an arbitrary serial queue, so everything real happens on the main actor.
+    nonisolated func photoLibraryDidChange(_ changeInstance: PHChange) {
+        Task { @MainActor [weak self] in self?.apply(changeInstance) }
+    }
+
+    private func apply(_ change: PHChange) {
+        guard let fetch = currentFetch,
+              let details = change.changeDetails(for: fetch) else { return }
+
+        currentFetch = details.fetchResultAfterChanges
+        var loaded: [PHAsset] = []
+        loaded.reserveCapacity(details.fetchResultAfterChanges.count)
+        details.fetchResultAfterChanges.enumerateObjects { asset, _, _ in loaded.append(asset) }
+
+        assets = loaded
+        downloadableAssets = expandingBursts(loaded)
+
+        // Selection is held by identifier, so it survives a reload -- drop only the
+        // entries whose photo genuinely went away. Wiping it here would be maddening
+        // for someone half way through picking a few hundred photos.
+        let live = Set(loaded.map(\.localIdentifier))
+        selection.formIntersection(live)
+
+        rebuildSections()
+        arrivedSinceOpen += details.insertedObjects.count
+        libraryVersion += 1
+
+        // Counts across every album may have moved too. Debounced, because an import
+        // fires a burst of changes and recounting 60 albums each time is wasteful.
+        albumReloadTask?.cancel()
+        albumReloadTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            self?.loadAlbums()
         }
     }
 }

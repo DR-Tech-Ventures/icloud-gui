@@ -133,6 +133,12 @@ struct GuideSheet: View {
                           body: "Two progress bars: one for the whole run, and one for the file currently transferring — so a large video shows movement instead of appearing stuck. Cancel at any point; a half-written photo is never left behind."),
             ]),
             GuideChapter(title: "Options", items: [
+                GuideItem(symbol: "antenna.radiowaves.left.and.right",
+                          title: "The library updates itself",
+                          body: "You do not need to reopen the app when new photos arrive. The grid follows your library live — take a photo on your phone and it appears here once iCloud syncs it, with your selection left intact. The status line notes how many arrived since you opened the window.\n\nThe refresh button next to the destination folder forces a full reload if you want one."),
+                GuideItem(symbol: "arrow.trianglehead.2.clockwise",
+                          title: "Download new photos automatically",
+                          body: "Off by default. Turn it on and every photo that arrives is fetched as soon as it appears, with no clicking.\n\nTurn it on only after a full backup has finished. Doing it beforehand means the first change triggers a download of everything still missing, which can be hundreds of gigabytes."),
                 GuideItem(symbol: "sparkles",
                           title: "Only new",
                           body: "On by default. The app scans your destination and tells you what is actually missing before you start — \"1,247 new · 34,567 already downloaded\". Re-run it any time as an incremental backup; nothing is fetched twice."),

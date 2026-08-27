@@ -354,6 +354,30 @@ SMB, 40,000 individual existence checks is 40,000 network round trips; one enume
 is a handful of directory reads. Already-downloaded photos are then settled from the
 index without touching PhotoKit at all.
 
+## The library stays live
+
+The app watches your photo library, so photos that arrive while it is open show up on
+their own — no reopening, no refresh button needed. Your **selection survives** a
+refresh: entries are held by identifier, and only photos that genuinely went away are
+dropped. The status line notes how many arrived since you opened the window.
+
+Album counts are recounted too, debounced by two seconds so an import firing a burst of
+changes does not recount sixty albums each time.
+
+The refresh button beside the destination forces a full reload of both the library and
+the destination scan.
+
+### Downloading new photos automatically
+
+Off by default. In **File Options → Download new photos automatically**: every photo
+that arrives is fetched as soon as it appears.
+
+**Turn this on only after a full backup has finished.** Before that, the first change
+triggers a download of everything still missing — which can be hundreds of gigabytes.
+
+If an item fails repeatedly it is not retried in a loop: the app remembers the set it
+last auto-started on and will not restart on the same one.
+
 ## Browsing by date
 
 The grid is grouped by date with **sticky headers**, switchable between **Day / Month /

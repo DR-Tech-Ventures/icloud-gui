@@ -12,6 +12,10 @@ struct ContentView: View {
     @AppStorage("folderLayout") private var layoutRaw = FolderLayout.dateFolders.rawValue
     @AppStorage("datePrefix") private var datePrefix = false
     @AppStorage("finderTags") private var writeFinderTags = true
+    @AppStorage("autoDownload") private var autoDownload = false
+    /// The set we last auto-started on, so a persistently failing item cannot put the
+    /// app in a download loop.
+    @State private var lastAutoAttempt: Set<String> = []
     @State private var showFailures = false
     @AppStorage("hasSeenGuide") private var hasSeenGuide = false
     @State private var showGuide = false
@@ -43,13 +47,39 @@ struct ContentView: View {
         .onChange(of: store.selectedAlbum) { _, _ in refresh() }
         .onChange(of: includeOriginals) { _, _ in refresh() }
         .onChange(of: layoutRaw) { _, _ in refresh() }
+        // The library changed underneath us, so what is "already downloaded" moved.
+        .onChange(of: store.libraryVersion) { _, _ in refresh() }
+        .onChange(of: dest.newAssetIDs) { _, ids in maybeAutoDownload(ids) }
         .onChange(of: datePrefix) { _, _ in refresh() }
     }
 
     private var layout: FolderLayout { FolderLayout(rawValue: layoutRaw) ?? .dateFolders }
 
+    private func startDownload() {
+        guard let root = dest.url else { return }
+        downloader.start(assets: downloadTargets,
+                         destination: root,
+                         existing: dest.existing,
+                         includeUnmodifiedOriginals: includeOriginals,
+                         layout: layout,
+                         datePrefix: datePrefix,
+                         writeFinderTags: writeFinderTags)
+    }
+
+    /// Starts a download when new photos land, if the user asked for that.
+    private func maybeAutoDownload(_ ids: Set<String>) {
+        guard autoDownload, !ids.isEmpty, dest.url != nil,
+              !downloader.progress.isRunning, !dest.isWorking,
+              ids != lastAutoAttempt else { return }
+        lastAutoAttempt = ids
+        startDownload()
+    }
+
     private func refresh() {
         guard dest.url != nil, !store.downloadableAssets.isEmpty else { return }
+        // Pointless to rescan a folder we are actively writing into, and a finished
+        // run already refreshes. New arrivals mid-download are picked up then.
+        guard !downloader.progress.isRunning else { return }
         dest.refresh(assets: store.downloadableAssets,
                      includeUnmodifiedOriginals: includeOriginals,
                      layout: layout,
@@ -134,8 +164,12 @@ struct ContentView: View {
                             .fixedSize()
                     }
 
-                    Button { refresh() } label: { Image(systemName: "arrow.clockwise") }
-                        .help("Re-scan the destination for files already downloaded")
+                    Button {
+                        store.loadAlbums()
+                        store.select(store.selectedAlbum)
+                        refresh()
+                    } label: { Image(systemName: "arrow.clockwise") }
+                        .help("Reload the library and re-scan the destination")
                         .disabled(dest.isWorking)
                 } else {
                     Text("No folder chosen")
@@ -160,6 +194,10 @@ struct ContentView: View {
                     Toggle("Date-prefix filenames", isOn: $datePrefix)
                     Toggle("Keep pre-edit originals", isOn: $includeOriginals)
                     Toggle("Write Finder tags", isOn: $writeFinderTags)
+
+                    Divider()
+
+                    Toggle("Download new photos automatically", isOn: $autoDownload)
                 } label: {
                     Label("File Options", systemImage: "slider.horizontal.3")
                 }
@@ -203,6 +241,11 @@ struct ContentView: View {
                     Text(dest.statusText).font(.callout)
                         .foregroundStyle(dest.isWorking ? .secondary : .primary)
                         .lineLimit(1).truncationMode(.tail)
+                    if store.arrivedSinceOpen > 0 {
+                        Text("· \(store.arrivedSinceOpen) arrived since opening")
+                            .font(.callout).foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                     Spacer()
                 }
             }
@@ -223,16 +266,7 @@ struct ContentView: View {
                         .monospacedDigit().font(.callout).foregroundStyle(.secondary)
                     Button("Cancel", role: .cancel) { downloader.cancel() }
                 } else {
-                    Button {
-                        guard let root = dest.url else { return }
-                        downloader.start(assets: downloadTargets,
-                                         destination: root,
-                                         existing: dest.existing,
-                                         includeUnmodifiedOriginals: includeOriginals,
-                                         layout: layout,
-                                         datePrefix: datePrefix,
-                                         writeFinderTags: writeFinderTags)
-                    } label: {
+                    Button { startDownload() } label: {
                         Label(downloadLabel, systemImage: "arrow.down.circle.fill")
                     }
                     .keyboardShortcut(.defaultAction)
@@ -282,6 +316,7 @@ struct ContentView: View {
         if datePrefix { parts.append("dated names") }
         if includeOriginals { parts.append("+ originals") }
         if writeFinderTags { parts.append("tags") }
+        if autoDownload { parts.append("auto") }
         return parts.joined(separator: " · ")
     }
 
