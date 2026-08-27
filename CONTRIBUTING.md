@@ -77,6 +77,12 @@ These were each found the hard way. The comments in the code say so too.
 - **Hidden and Recently Deleted are macOS restrictions**, not missing features. Neither
   is reachable by any third-party app. Both are listed in the sidebar deliberately.
 
+## Releasing
+
+`./release.sh` handles signing, notarisation and stapling. It checks its prerequisites
+first and tells you what is missing, so running it is a safe way to see where you stand.
+Setup is documented in [RELEASING.md](RELEASING.md).
+
 ## Style
 
 Match the surrounding code. Comments explain *why*, especially where behaviour looks

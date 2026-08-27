@@ -39,53 +39,99 @@ friction.
 
 ## Option 2 — signed and notarised releases ($99/year)
 
-The only way to offer a download that just works.
-
-**You need:** an [Apple Developer Program](https://developer.apple.com/programs/)
-membership, and a **Developer ID Application** certificate (not "Mac App Distribution" —
-that one is for the App Store).
-
-The build differs from the local one in two ways:
-
-- Sign with the Developer ID certificate instead of `-` or the local identity.
-- **Add `--options runtime`.** Notarisation requires hardened runtime. It is safe here,
-  unlike with local signing, because a Developer ID certificate carries a real Team ID —
-  which is exactly what TCC wants in order to show the Photos prompt.
+The only way to offer a download that just works. Once set up, the whole thing is:
 
 ```bash
-codesign --force --deep --timestamp --options runtime \
-         --sign "Developer ID Application: YOUR NAME (TEAMID)" \
-         --identifier com.local.icloudgui \
-         "build/iCloud GUI.app"
-
-ditto -c -k --keepParent "build/iCloud GUI.app" iCloudGUI.zip
-
-xcrun notarytool submit iCloudGUI.zip \
-      --apple-id "you@example.com" --team-id TEAMID \
-      --password "app-specific-password" --wait
-
-xcrun stapler staple "build/iCloud GUI.app"
+./release.sh
 ```
 
-Then zip the stapled `.app` and attach it to a GitHub Release.
+`release.sh` refuses to run until each prerequisite is in place and tells you which one
+is missing, so you can run it at any point to see where you stand.
 
-**Verify before publishing** — on a Mac that has never run the app:
+### Step 1 — confirm you have a *paid* membership
+
+Sign in at [developer.apple.com/account](https://developer.apple.com/account).
+
+A **free** Apple ID gets you `Apple Development` certificates, which are for running
+your own builds on your own devices. They **cannot notarise**. Only the paid
+[Apple Developer Program](https://developer.apple.com/programs/) ($99/year) can issue
+the `Developer ID Application` certificate this needs.
+
+Check what you already have:
 
 ```bash
-spctl -a -vvv "build/iCloud GUI.app"        # should say: accepted, Notarized Developer ID
-xcrun stapler validate "build/iCloud GUI.app"
+security find-identity -v -p codesigning
 ```
 
-**Test the Photos prompt on a clean machine or a fresh user account.** Local signing and
-Developer ID signing behave differently with TCC, and this project has already been
-bitten once by hardened runtime silently suppressing the prompt. Do not assume it works
-because it worked locally.
+`Apple Development: …` is not enough. You are looking for `Developer ID Application: …`.
 
-Notes:
-- Change `CFBundleIdentifier` in `build.sh` from `com.local.icloudgui` to a reverse-DNS
-  identifier you control before publishing binaries.
-- Automating this in GitHub Actions means putting the certificate (`.p12`, base64) and
-  an app-specific password in repository secrets.
+### Step 2 — create the Developer ID Application certificate
+
+Easiest route, which handles the private key for you:
+
+> **Xcode → Settings → Accounts → select your team → Manage Certificates → + →
+> Developer ID Application**
+
+Manual route, if you prefer: create a Certificate Signing Request in Keychain Access
+(*Keychain Access → Certificate Assistant → Request a Certificate From a Certificate
+Authority*, saved to disk), upload it under Certificates on the developer site, choose
+**Developer ID Application**, then download and double-click the resulting `.cer`.
+
+**Back up this certificate and its private key.** Export both as a `.p12` from Keychain
+Access and keep it somewhere safe — Apple limits how many Developer ID certificates you
+can create, and losing the private key is a genuine problem.
+
+### Step 3 — create an app-specific password
+
+At [appleid.apple.com](https://appleid.apple.com) → **Sign-In and Security** →
+**App-Specific Passwords** → generate one for notarisation.
+
+This is **not** your Apple ID password. Never put your real password into a script,
+a CI secret, or a terminal command.
+
+### Step 4 — store the notarisation credentials
+
+```bash
+xcrun notarytool store-credentials icloudgui-notary       --apple-id "you@example.com" --team-id "DU97PPZ2L2"
+```
+
+It prompts for the app-specific password from step 3 and saves everything in your
+keychain, so the password never appears in a script or your shell history.
+
+### Step 5 — release
+
+```bash
+BUNDLE_ID=com.yourdomain.icloudgui ./release.sh
+```
+
+That builds, signs with hardened runtime, submits to Apple, waits for the result,
+staples the ticket into the `.app`, verifies with `spctl`, and produces a zip ready to
+attach to a GitHub Release.
+
+### Two things that need real testing
+
+- **The Photos prompt.** Hardened runtime is *required* for notarisation and *breaks*
+  TCC when combined with local signing — this project has already lost an afternoon to
+  that exact failure, where the prompt silently never appears and access returns
+  `denied`. It should work with a Developer ID certificate, because that carries a real
+  Team ID. Verify it rather than assume: test on a clean macOS user account, not the
+  machine you built on.
+- **The entitlement.** `release.entitlements` requests
+  `com.apple.security.personal-information.photos-library`, the hardened-runtime
+  Resource Access entitlement for the photo library. It is harmless if redundant. If the
+  prompt fails to appear, this is the first thing to try toggling.
+
+### Automating it in GitHub Actions
+
+You need two repository secrets:
+
+- The certificate and key as a base64 `.p12`
+  (`base64 -i cert.p12 | pbcopy`), plus its export password
+- The app-specific password, apple-id and team-id
+
+The workflow imports the `.p12` into a temporary keychain, then runs the same
+`codesign` / `notarytool` / `stapler` sequence with `--password` instead of
+`--keychain-profile`. Keep it on a tag trigger so it only runs for releases.
 
 ## Option 3 — unsigned release (not recommended)
 
