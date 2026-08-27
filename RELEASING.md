@@ -114,6 +114,35 @@ That builds, signs with hardened runtime, submits to Apple, waits for the result
 staples the ticket into the `.app`, verifies with `spctl`, and produces a zip ready to
 attach to a GitHub Release.
 
+### Step 6 — publish it
+
+`release.sh` leaves the distributable at **`build/iCloud-GUI.zip`**. Attach it to a
+GitHub Release:
+
+```bash
+gh release create v1.0 "build/iCloud-GUI.zip" \
+   --repo DR-Tech-Ventures/icloud-gui \
+   --title "iCloud GUI 1.0" \
+   --notes "Download your iCloud photos to a Mac or NAS. Signed and notarised by Apple, so it opens without any Gatekeeper warnings."
+```
+
+`build/` is gitignored — release binaries are attached to the release, never committed.
+
+### Why you cannot just zip a development build
+
+The output of `build.sh` is signed with an ad-hoc or self-signed certificate. That is
+fine locally, where nothing is quarantined. Once it has been downloaded, macOS attaches
+a quarantine flag and Gatekeeper refuses it outright:
+
+```
+$ spctl -a -vvv "iCloud GUI.app"
+iCloud GUI.app: rejected
+origin=iCloud GUI Local Signing
+```
+
+Only a notarised build gets `accepted / Notarized Developer ID`. There is no way around
+this short of asking every user to strip the quarantine attribute by hand — see Option 3.
+
 ### Two things that need real testing
 
 - **The Photos prompt.** Hardened runtime is *required* for notarisation and *breaks*
