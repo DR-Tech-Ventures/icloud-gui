@@ -65,7 +65,6 @@ struct PhotoGrid: View {
                             }
                         }
                     }
-                    .padding(.top, 20)
                 }
             }
             Divider()
@@ -120,8 +119,7 @@ private struct SectionHeader: View {
                 .buttonStyle(.borderless).font(.callout)
         }
         .padding(.horizontal, 12)
-        .padding(.top, 10)
-        .padding(.bottom, 8)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.bar)      // keeps text legible while pinned over scrolling tiles
     }
