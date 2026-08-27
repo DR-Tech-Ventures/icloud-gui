@@ -4,7 +4,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 APP_NAME="iCloud GUI"
-BUNDLE_ID="com.local.icloudgui"
+# Overridable so release.sh can sign the same bundle under a different id.
+BUNDLE_ID="${BUNDLE_ID:-com.drtechventures.icloudgui}"
 CONFIG="${1:-release}"
 APP="build/${APP_NAME}.app"
 

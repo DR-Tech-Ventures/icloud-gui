@@ -6,14 +6,14 @@
 #   2. A "Developer ID Application" certificate in your keychain
 #   3. A stored notarytool profile:
 #        xcrun notarytool store-credentials icloudgui-notary \
-#              --apple-id you@example.com --team-id TEAMID
+#              --apple-id you@example.com --team-id DJ2RANBKU3
 #      (that prompts for an app-specific password from appleid.apple.com --
 #       never your real Apple ID password)
 set -euo pipefail
 cd "$(dirname "$0")"
 
 APP_NAME="iCloud GUI"
-BUNDLE_ID="${BUNDLE_ID:-com.local.icloudgui}"
+BUNDLE_ID="${BUNDLE_ID:-com.drtechventures.icloudgui}"
 PROFILE="${NOTARY_PROFILE:-icloudgui-notary}"
 APP="build/${APP_NAME}.app"
 SUBMIT_ZIP="build/submit.zip"
@@ -26,14 +26,19 @@ IDENTITY="$(security find-identity -v -p codesigning \
 
 if [ -z "${IDENTITY:-}" ]; then
     cat >&2 <<'MSG'
-No "Developer ID Application" certificate found.
+No "Developer ID Application" certificate found in your keychains.
 
-This needs a PAID Apple Developer Program membership ($99/year). A free account
-gets "Apple Development" certificates, which cannot notarise.
+This project signs as DR Tech Ventures LLC (Team ID DJ2RANBKU3). An
+"Apple Development" certificate is NOT sufficient -- it cannot notarise.
 
-To create one:
-  Xcode -> Settings -> Accounts -> select your team -> Manage Certificates
-        -> + -> Developer ID Application
+If a Developer ID certificate already exists on another Mac, export it there as a
+.p12 (Keychain Access -> right-click the certificate -> Export) and double-click it
+here. Apple caps how many Developer ID certificates a team may hold, so reuse beats
+creating another.
+
+Otherwise create one -- Account Holder or Admin on the team only:
+  Xcode -> Settings -> Accounts -> DR Tech Ventures LLC
+        -> Manage Certificates -> + -> Developer ID Application
 
 Then run this script again. See RELEASING.md.
 MSG
@@ -50,15 +55,10 @@ Create one (it will prompt for an app-specific password -- generate that at
 appleid.apple.com under Sign-In and Security, NOT your real Apple ID password):
 
   xcrun notarytool store-credentials "$PROFILE" \\
-        --apple-id "you@example.com" --team-id "YOURTEAMID"
+        --apple-id "you@example.com" --team-id "DJ2RANBKU3"
 
 MSG
     exit 1
-fi
-
-if [ "$BUNDLE_ID" = "com.local.icloudgui" ]; then
-    echo "!!  Bundle id is still com.local.icloudgui." >&2
-    echo "!!  Set BUNDLE_ID to a reverse-DNS identifier you control before publishing." >&2
 fi
 
 # --- Build -----------------------------------------------------------------

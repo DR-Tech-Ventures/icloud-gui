@@ -67,6 +67,12 @@ security find-identity -v -p codesigning
 
 ### Step 2 — create the Developer ID Application certificate
 
+> This project is set up for **DR Tech Ventures LLC** (Team ID `DJ2RANBKU3`), an
+> Organization account. Only the **Account Holder** or an **Admin** on that team can
+> create Developer ID certificates, and Apple caps how many a team may hold — so if one
+> already exists on another Mac, export it as a `.p12` and import it here rather than
+> creating another.
+
 Easiest route, which handles the private key for you:
 
 > **Xcode → Settings → Accounts → select your team → Manage Certificates → + →
@@ -92,7 +98,7 @@ a CI secret, or a terminal command.
 ### Step 4 — store the notarisation credentials
 
 ```bash
-xcrun notarytool store-credentials icloudgui-notary       --apple-id "you@example.com" --team-id "DU97PPZ2L2"
+xcrun notarytool store-credentials icloudgui-notary       --apple-id "you@example.com" --team-id "DJ2RANBKU3"
 ```
 
 It prompts for the app-specific password from step 3 and saves everything in your

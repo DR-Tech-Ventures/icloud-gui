@@ -40,7 +40,7 @@ bottom bar.
 To see the first-run version again:
 
 ```bash
-defaults delete com.local.icloudgui hasSeenGuide
+defaults delete com.drtechventures.icloudgui hasSeenGuide
 ```
 
 ## Installing
@@ -98,7 +98,7 @@ It creates a local self-signed code-signing certificate in its own keychain. The
 designated requirement then references the *certificate* rather than the code hash:
 
 ```
-designated => identifier "com.local.icloudgui" and certificate leaf = H"650c6db…"
+designated => identifier "com.drtechventures.icloudgui" and certificate leaf = H"650c6db…"
 ```
 
 That does not change when you recompile, so the Photos grant sticks. You will be asked
@@ -128,7 +128,7 @@ triggering a prompt.
 To clear a stuck grant and start fresh:
 
 ```bash
-tccutil reset Photos com.local.icloudgui
+tccutil reset Photos com.drtechventures.icloudgui
 ```
 
 ## Contributing
