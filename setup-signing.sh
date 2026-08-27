@@ -23,7 +23,10 @@ if [[ "${1:-}" == "--remove" ]]; then
     exit 0
 fi
 
-if security find-identity -v "$KEYCHAIN" 2>/dev/null | grep -q "$IDENTITY"; then
+# No -v here. That flag filters to trust-valid identities, and a self-signed
+# certificate never is -- so -v reports nothing, the guard never fires, and the
+# script tries to recreate a keychain that already exists.
+if security find-identity "$KEYCHAIN" 2>/dev/null | grep -q "$IDENTITY"; then
     echo "Identity already present. Nothing to do."
     exit 0
 fi
@@ -43,10 +46,17 @@ openssl pkcs12 -export -out "$TMP/id.p12" -inkey "$TMP/key.pem" -in "$TMP/cert.p
     -certpbe PBE-SHA1-3DES -keypbe PBE-SHA1-3DES -macalg sha1 \
     -passout "pass:$PASSWORD"
 
-echo "==> Creating keychain"
-security create-keychain -p "$PASSWORD" "$KEYCHAIN"
-security set-keychain-settings "$KEYCHAIN"           # no auto-lock timeout
-security unlock-keychain -p "$PASSWORD" "$KEYCHAIN"
+# The keychain can exist without the identity, if an earlier run was interrupted
+# between the two steps. Reuse it rather than failing.
+if security show-keychain-info "$KEYCHAIN" >/dev/null 2>&1; then
+    echo "==> Reusing existing keychain"
+    security unlock-keychain -p "$PASSWORD" "$KEYCHAIN"
+else
+    echo "==> Creating keychain"
+    security create-keychain -p "$PASSWORD" "$KEYCHAIN"
+    security set-keychain-settings "$KEYCHAIN"       # no auto-lock timeout
+    security unlock-keychain -p "$PASSWORD" "$KEYCHAIN"
+fi
 security import "$TMP/id.p12" -k "$KEYCHAIN" -P "$PASSWORD" -T /usr/bin/codesign -A
 
 # We own this keychain and its password, so codesign can be authorised without a prompt.
