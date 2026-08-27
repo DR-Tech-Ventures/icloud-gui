@@ -12,6 +12,10 @@ cd "$(dirname "$0")"
 
 KEYCHAIN="icloudgui-signing.keychain"
 IDENTITY="iCloud GUI Local Signing"
+# Not a secret. This password protects a keychain that this script creates on your
+# own machine, holding one self-signed certificate used only for local builds. It is
+# hardcoded on purpose so the build is reproducible without prompting. Nothing signed
+# with it is distributable -- releases use a Developer ID certificate, see RELEASING.md.
 PASSWORD="icloudgui-local"
 
 if [[ "${1:-}" == "--remove" ]]; then

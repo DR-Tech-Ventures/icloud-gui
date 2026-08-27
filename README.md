@@ -50,8 +50,8 @@ commands — and a locally built app is never quarantined, so macOS Gatekeeper n
 in the way:
 
 ```bash
-git clone <repo-url>
-cd iCloud_GUI
+git clone https://github.com/DR-Tech-Ventures/icloud-gui
+cd icloud-gui
 ./setup-signing.sh   # once, so the Photos grant survives rebuilds
 ./run.sh
 ```

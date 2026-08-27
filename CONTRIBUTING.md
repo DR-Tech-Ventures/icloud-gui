@@ -3,8 +3,8 @@
 ## Getting set up
 
 ```bash
-git clone <repo-url>
-cd iCloud_GUI
+git clone https://github.com/DR-Tech-Ventures/icloud-gui
+cd icloud-gui
 ./setup-signing.sh   # once: local signing identity so Photos grants survive rebuilds
 ./run.sh             # build and launch
 ```

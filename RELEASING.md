@@ -27,8 +27,8 @@ This is the honest recommendation for a tool like this, and it is genuinely easy
 because the project has **no dependencies and no Xcode project**:
 
 ```bash
-git clone <repo-url>
-cd iCloud_GUI
+git clone https://github.com/DR-Tech-Ventures/icloud-gui
+cd icloud-gui
 ./setup-signing.sh
 ./run.sh
 ```
