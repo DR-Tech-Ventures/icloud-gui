@@ -189,16 +189,12 @@ func applyFinderTags(to url: URL, tags: [String]) {
     guard !tags.isEmpty else { return }
     let names = Array(Set(tags)).sorted()   // stable, de-duplicated
 
-    if #available(macOS 26.0, *) {
-        var values = URLResourceValues()
-        values.tagNames = names
-        var mutable = url
-        try? mutable.setResourceValues(values)
-        return
-    }
-
-    // The tagNames setter only exists on macOS 26+. Below that, write the same
-    // extended attribute Finder itself reads: a binary plist array of tag names.
+    // Written as the extended attribute Finder itself reads, on every macOS version.
+    //
+    // URLResourceValues.tagNames gained a setter only in macOS 26, and #available does
+    // not help: it is a runtime check, while the setter has to exist in the SDK being
+    // compiled against. Gating it still breaks the build on an older toolchain -- which
+    // is exactly how CI caught this, having compiled clean on a macOS 27 SDK locally.
     guard let data = try? PropertyListSerialization.data(
         fromPropertyList: names, format: .binary, options: 0) else { return }
     _ = url.withUnsafeFileSystemRepresentation { path -> Int32 in
