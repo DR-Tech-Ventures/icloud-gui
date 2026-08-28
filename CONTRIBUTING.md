@@ -181,6 +181,20 @@ These were each found the hard way. The comments in the code say so too.
 - **Hidden and Recently Deleted are macOS restrictions**, not missing features. Neither
   is reachable by any third-party app. Both are listed in the sidebar deliberately.
 
+## Raising the deployment target
+
+`Package.swift` is the single source for it -- `build.sh` reads `.macOS(.vNN)` from
+there, stamps it into the binary as `minos` and writes it to `LSMinimumSystemVersion`, so
+there is nothing to keep in sync by hand.
+
+One thing blocks raising it above macOS 14 today. `Shot.swift` captures the window with
+`CGWindowListCreateImage`, which the SDK marks **obsoleted in macOS 15.0**. At a
+deployment target of 14 that is a warning; at 15 or higher it is a hard `unavailable`
+error and the build stops. It is used because it is the only way to capture the app's own
+window without the Screen Recording permission, which the documentation screenshots
+depend on. Whoever raises the target has to replace it first -- ScreenCaptureKit plus a
+permission prompt, or dropping `--shot` and capturing by hand.
+
 ## Where the logs are
 
 Three places, none of which is a file the app invents:

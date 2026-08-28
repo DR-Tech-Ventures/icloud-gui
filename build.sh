@@ -16,7 +16,19 @@ APP="build/${APP_NAME}.app"
 # however new the SDK it was actually compiled against. Stamping the real SDK version
 # restores the split Xcode has by default: minos stays 14.0, sdk becomes the SDK in use.
 SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
-MIN_VERSION="14.0"
+
+# Read from Package.swift rather than repeated here. This value is load-bearing twice --
+# it is stamped into the binary as minos and written to Info.plist as
+# LSMinimumSystemVersion -- while Package.swift is what the compiler actually targets.
+# Hardcoding it meant a contributor bumping only Package.swift would ship a binary
+# claiming macOS 14 support while compiled against newer APIs: a launch-time crash on
+# the oldest supported OS, and nothing anywhere would have said so.
+MIN_VERSION="$(sed -n 's/.*\.macOS(\.v\([0-9][0-9]*\)).*/\1.0/p' Package.swift | head -1)"
+if [ -z "$MIN_VERSION" ]; then
+    echo "Could not read the macOS deployment target from Package.swift." >&2
+    echo "Expected a platforms: [.macOS(.vNN)] entry." >&2
+    exit 1
+fi
 
 echo "==> Compiling ($CONFIG, SDK $SDK_VERSION, deployment target $MIN_VERSION)"
 swift build -c "$CONFIG" \

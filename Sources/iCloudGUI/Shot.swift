@@ -83,13 +83,21 @@ enum Shot {
     /// tree, so the layer-render fallback below captures them as blank white. Only a
     /// compositor-level capture sees what is actually on screen.
     ///
-    /// CGWindowListCreateImage is formally deprecated in favour of ScreenCaptureKit,
-    /// which is not a usable swap here: ScreenCaptureKit requires the Screen Recording
-    /// TCC grant even to capture your own window, which would put a permission dialog
-    /// in the way of regenerating a documentation screenshot. This call needs no grant.
-    /// Verified on macOS 27. The build therefore carries one deprecation warning on
-    /// purpose -- marking this function deprecated only moves the warning to the
-    /// caller, and so on up to App.init.
+    /// CGWindowListCreateImage is pushed towards ScreenCaptureKit, which is not a usable
+    /// swap here: ScreenCaptureKit requires the Screen Recording TCC grant even to
+    /// capture your own window, which would put a permission dialog in the way of
+    /// regenerating a documentation screenshot. This call needs no grant. Verified on
+    /// macOS 27.
+    ///
+    /// The build carries one warning for it on purpose -- marking this function
+    /// deprecated only moves the warning to the caller, and so on up to App.init.
+    ///
+    /// IMPORTANT: it is a warning only because the deployment target is macOS 14. The
+    /// header says "obsoleted in macOS 15.0", so raising `.macOS(.v14)` in Package.swift
+    /// turns this into a hard `unavailable` error and the build stops here. That is a
+    /// real constraint on the deployment target, not a stale comment: whoever raises it
+    /// has to solve the screenshot capture first, and the options are ScreenCaptureKit
+    /// plus a permission prompt, or dropping `--shot` and capturing by hand.
     private static func windowCapture(_ window: NSWindow) -> Data? {
         let id = CGWindowID(window.windowNumber)
         guard id != 0,
