@@ -19,7 +19,11 @@ jobs:
     # Mac. See the toolbar comment in ContentView.swift.
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      # v4 runs on Node 20, which GitHub now forces onto Node 24 with a deprecation
+      # warning. v5 through v7 all declare node24; v7 is current and changes nothing we
+      # use -- its one behaviour change blocks checking out fork PRs under
+      # pull_request_target and workflow_run, and this workflow uses neither.
+      - uses: actions/checkout@v7
 
       - name: Show toolchain
         run: swift --version
