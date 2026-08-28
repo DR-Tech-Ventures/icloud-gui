@@ -8,6 +8,11 @@
 - [ ] Non-trivial logic has an assertion in `SelfCheck.swift`
 - [ ] No new third-party dependencies
 - [ ] Comments explain *why* for anything that looks surprising
+- [ ] **Documentation updated in this PR** — README, CONTRIBUTING, RELEASING, SECURITY
+      or the in-app guide in `Guide.swift`, whichever this change affects
+- [ ] **Version bumped** in `build.sh` (`CFBundleShortVersionString` and
+      `CFBundleVersion`) if anything under `Sources/` or `build.sh` changed, with a
+      `CHANGELOG.md` entry. Tooling-only changes need neither.
 
 ## If this touches PhotoKit
 
