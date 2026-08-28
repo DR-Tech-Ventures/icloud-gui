@@ -65,7 +65,8 @@ cd icloud-gui
 ./run.sh
 ```
 
-If a downloadable build is ever published it will be signed and notarised by Apple.
+Released builds are signed and notarised by Apple, and cut by hand rather than by CI so
+the signing key never leaves the maintainer's Mac.
 Anything else would mean asking you to bypass Gatekeeper on an app that reads your
 entire photo library — see [RELEASING.md](RELEASING.md) for why that is not offered.
 

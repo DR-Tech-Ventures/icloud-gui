@@ -3,6 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+    # Tags are built too, so a released commit is known to compile and pass its
+    # assertions on a clean machine. No signing happens here -- see RELEASING.md.
+    tags: ["v*"]
   pull_request:
 
 jobs:

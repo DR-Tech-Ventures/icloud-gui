@@ -47,7 +47,12 @@ gh api -X DELETE repos/DR-Tech-Ventures/icloud-gui/branches/main/protection
 ./run.sh --self-check
 ```
 
-All assertions must pass. CI runs the same command on every PR.
+All assertions must pass. CI runs the same command on every pull request, every push to
+`main`, and every `v*` tag — so a released commit is known to build and pass its
+assertions on a clean machine.
+
+CI does not sign or notarise. Releases are cut by hand from a Mac with `./release.sh`,
+so the Developer ID signing key never leaves it. `RELEASING.md` explains that choice.
 
 **Non-trivial logic should leave a check behind.** The self-check is plain asserts — no
 test framework, no fixtures. Add cases to `SelfCheck.swift` next to the existing ones.

@@ -61,6 +61,38 @@ MSG
     exit 1
 fi
 
+# --- Refuse to rebuild an already-released version --------------------------
+# Notarising a version that is already tagged produces an artifact nobody can tell
+# apart from the published one, and burns a round trip to Apple discovering it. Cheap
+# to catch here, before the upload.
+VERSION="$(sed -n 's/.*CFBundleShortVersionString<\/key><string>\(.*\)<\/string>.*/\1/p' build.sh | head -1)"
+if [ -z "${VERSION:-}" ]; then
+    echo "Could not read CFBundleShortVersionString from build.sh." >&2
+    exit 1
+fi
+echo "==> Version: $VERSION"
+
+if [ "${ALLOW_RELEASED_VERSION:-}" != "1" ]; then
+    git fetch --tags --quiet 2>/dev/null || true
+    if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+        cat >&2 <<MSG
+
+v$VERSION is already tagged, so this build would duplicate a published release.
+
+Bump CFBundleShortVersionString and CFBundleVersion in build.sh first:
+
+    <key>CFBundleShortVersionString</key><string>1.2</string>
+    <key>CFBundleVersion</key>           <string>3</string>
+
+To rebuild the same version deliberately (re-notarising an existing release, say):
+
+    ALLOW_RELEASED_VERSION=1 ./release.sh
+
+MSG
+        exit 1
+    fi
+fi
+
 # --- Build -----------------------------------------------------------------
 echo "==> Building"
 rm -f "$SUBMIT_ZIP" "$DIST_ZIP"
