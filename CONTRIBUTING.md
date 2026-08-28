@@ -13,6 +13,34 @@ You need macOS 14+ and the Xcode command line tools. There are **no third-party
 dependencies** and no Xcode project — `swift build` plus a shell script that assembles
 the `.app`. Please keep it that way unless there is a strong reason not to.
 
+## The workflow
+
+`main` is protected: it cannot be pushed to directly, by anyone, including
+administrators. Every change goes through a pull request, and CI must be green before it
+can merge.
+
+```bash
+git checkout -b feature/short-name
+# ... work ...
+./run.sh --self-check
+git push -u origin feature/short-name
+gh pr create --fill
+gh pr merge --squash --delete-branch    # once CI is green
+```
+
+History is linear — merges are squashed, not merge-committed. Approvals are not
+required, so a solo maintainer is not blocked, but the pull request and a passing build
+are.
+
+If you genuinely need to bypass this (a broken `main`, say), lift the rule, push, and put
+it back:
+
+```bash
+gh api -X DELETE repos/DR-Tech-Ventures/icloud-gui/branches/main/protection
+# ... fix ...
+# then re-apply it; the settings are recorded in RELEASING.md
+```
+
 ## Before opening a PR
 
 ```bash
