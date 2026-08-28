@@ -337,7 +337,7 @@ final class DestinationModel: ObservableObject {
             }.value
             guard !Task.isCancelled, let self else { return }
             self.existing = found
-            self.statusText = "Comparing \(assets.count) items…"
+            self.statusText = "Comparing \(assets.count.formatted()) items…"
 
             var ledger = DownloadLedger(destination: root)
             ledger.prune(keeping: found)
@@ -360,9 +360,13 @@ final class DestinationModel: ObservableObject {
 
     private static func describe(_ plan: IncrementalPlan) -> String {
         if plan.isEmpty { return "Everything here is already downloaded." }
-        var text = "\(plan.newAssets.count) new"
-        if plan.newFileCount != plan.newAssets.count { text += " (\(plan.newFileCount) files)" }
-        if plan.completeCount > 0 { text += " · \(plan.completeCount) already downloaded" }
+        var text = "\(plan.newAssets.count.formatted()) new"
+        if plan.newFileCount != plan.newAssets.count {
+            text += " (\(plan.newFileCount.formatted()) files)"
+        }
+        if plan.completeCount > 0 {
+            text += " · \(plan.completeCount.formatted()) already downloaded"
+        }
         return text
     }
 }

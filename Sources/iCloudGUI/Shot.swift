@@ -48,8 +48,16 @@ enum Shot {
             }
             // Let the resize settle before capturing.
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-                capture(window, to: out)
-                exit(0)
+                // A window capture records the window as it is drawn, so an app that
+                // lost focus to the launching terminal is captured with dimmed chrome.
+                // Done here rather than before the delay, because the terminal takes
+                // focus back in the meantime.
+                NSApp.activate(ignoringOtherApps: true)
+                window.makeKeyAndOrderFront(nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    capture(window, to: out)
+                    exit(0)
+                }
             }
         }
     }
@@ -61,6 +69,38 @@ enum Shot {
     }
 
     private static func capture(_ window: NSWindow, to url: URL) {
+        if let data = windowCapture(window) {
+            try? data.write(to: url)
+            FileHandle.standardError.write("shot via window capture\n".data(using: .utf8)!)
+            return
+        }
+        FileHandle.standardError.write("shot via layer render (window capture unavailable)\n".data(using: .utf8)!)
+        layerCapture(window, to: url)
+    }
+
+    /// Preferred path. Liquid Glass surfaces -- the sidebar, toolbar and every control
+    /// bezel -- are drawn by backdrop layers that sit outside the view's own layer
+    /// tree, so the layer-render fallback below captures them as blank white. Only a
+    /// compositor-level capture sees what is actually on screen.
+    ///
+    /// CGWindowListCreateImage is formally deprecated in favour of ScreenCaptureKit,
+    /// which is not a usable swap here: ScreenCaptureKit requires the Screen Recording
+    /// TCC grant even to capture your own window, which would put a permission dialog
+    /// in the way of regenerating a documentation screenshot. This call needs no grant.
+    /// Verified on macOS 27. The build therefore carries one deprecation warning on
+    /// purpose -- marking this function deprecated only moves the warning to the
+    /// caller, and so on up to App.init.
+    private static func windowCapture(_ window: NSWindow) -> Data? {
+        let id = CGWindowID(window.windowNumber)
+        guard id != 0,
+              let cg = CGWindowListCreateImage(.null, .optionIncludingWindow, id,
+                                               [.boundsIgnoreFraming, .bestResolution]),
+              cg.width > 1, cg.height > 1 else { return nil }
+        let rep = NSBitmapImageRep(cgImage: cg)
+        return rep.representation(using: .png, properties: [:])
+    }
+
+    private static func layerCapture(_ window: NSWindow, to url: URL) {
         guard let view = window.contentView else { exit(4) }
         let bounds = view.bounds
         guard let rep = view.bitmapImageRepForCachingDisplay(in: bounds) else { exit(5) }

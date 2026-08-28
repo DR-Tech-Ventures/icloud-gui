@@ -17,7 +17,8 @@ BUNDLE_ID="${BUNDLE_ID:-com.drtechventures.icloudgui}"
 PROFILE="${NOTARY_PROFILE:-icloudgui-notary}"
 APP="build/${APP_NAME}.app"
 SUBMIT_ZIP="build/submit.zip"
-DIST_ZIP="build/${APP_NAME// /-}.zip"
+DMG="build/${APP_NAME// /-}.dmg"
+DMG_STAGE="build/dmg-stage"
 
 # --- Preflight -------------------------------------------------------------
 IDENTITY="$(security find-identity -v -p codesigning \
@@ -95,7 +96,8 @@ fi
 
 # --- Build -----------------------------------------------------------------
 echo "==> Building"
-rm -f "$SUBMIT_ZIP" "$DIST_ZIP"
+rm -f "$SUBMIT_ZIP" "$DMG"
+rm -rf "$DMG_STAGE"
 # build.sh owns bundle assembly and the Info.plist, so the two cannot drift. It also
 # signs with the local identity; the Developer ID signature below replaces that.
 BUNDLE_ID="$BUNDLE_ID" ./build.sh release
@@ -133,8 +135,35 @@ xcrun stapler validate "$APP"
 echo "==> Gatekeeper assessment"
 spctl -a -vvv "$APP"
 
-ditto -c -k --keepParent "$APP" "$DIST_ZIP"
+# --- Package as a disk image ------------------------------------------------
+# A zip leaves people running the app straight out of ~/Downloads, where the next
+# browser cleanup takes it with them. A disk image with an /Applications symlink makes
+# "drag it there" the obvious move, which is also the only place an app can sensibly
+# live if it is going to be updated.
+echo "==> Building disk image"
+mkdir -p "$DMG_STAGE"
+cp -R "$APP" "$DMG_STAGE/"
+ln -s /Applications "$DMG_STAGE/Applications"
+hdiutil create -volname "$APP_NAME" -srcfolder "$DMG_STAGE" \
+        -ov -format UDZO -quiet "$DMG"
+rm -rf "$DMG_STAGE"
+
+# The disk image is a separate artifact from the app, with its own signature and its
+# own notarisation ticket. Skipping this leaves the app inside notarised but the
+# container not, so Gatekeeper checks the app online at first launch and refuses it on
+# a machine that happens to be offline. Hence the second round trip to Apple.
+echo "==> Signing disk image"
+codesign --force --timestamp --sign "$IDENTITY" "$DMG"
+
+echo "==> Submitting disk image to Apple"
+xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --wait
+xcrun stapler staple "$DMG"
+xcrun stapler validate "$DMG"
+
+echo "==> Gatekeeper assessment (disk image)"
+spctl -a -vvv -t open --context context:primary-signature "$DMG"
+
 rm -f "$SUBMIT_ZIP"
 echo
-echo "==> Ready to publish: $DIST_ZIP"
+echo "==> Ready to publish: $DMG"
 echo "    Test the Photos prompt on a clean user account before releasing."

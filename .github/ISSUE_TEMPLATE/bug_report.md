@@ -36,3 +36,23 @@ open "build/iCloud GUI.app" --args --hidden && sleep 8 && cat /tmp/icg-hidden.tx
 ```bash
 ./run.sh --self-check
 ```
+
+**If the app quit or vanished on its own**
+
+The app writes breadcrumbs to the macOS unified log. Paste the last hour:
+
+```bash
+log show --predicate 'subsystem == "com.drtechventures.icloudgui"' --last 1h --style compact
+```
+
+A `launched` line with no matching `terminating normally` means the process was killed
+rather than quit — worth saying so, it narrows things down a lot.
+
+If it actually crashed, macOS wrote a full report. Attach the newest one:
+
+```bash
+ls -t ~/Library/Logs/DiagnosticReports/ | grep -i iCloudGUI | head -3
+```
+
+**If a download failed**, the run log lives beside the photos, at
+`.icloudgui-log.txt` in your destination folder.

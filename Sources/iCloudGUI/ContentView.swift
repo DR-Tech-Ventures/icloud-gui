@@ -13,6 +13,7 @@ struct ContentView: View {
     @AppStorage("datePrefix") private var datePrefix = false
     @AppStorage("finderTags") private var writeFinderTags = true
     @AppStorage("autoDownload") private var autoDownload = false
+    @AppStorage("thumbSize") private var thumbSize = 132.0
     /// The set we last auto-started on, so a persistently failing item cannot put the
     /// app in a download loop.
     @State private var lastAutoAttempt: Set<String> = []
@@ -28,7 +29,7 @@ struct ContentView: View {
                 PermissionView(status: store.status) { await store.requestAccess() }
             }
         }
-        .frame(minWidth: 960, minHeight: 640)
+        .frame(minWidth: 1180, minHeight: 700)
         .task {
             if store.isAuthorized { store.loadAlbums() }
             if !destinationPath.isEmpty { dest.url = URL(fileURLWithPath: destinationPath) }
@@ -123,7 +124,7 @@ struct ContentView: View {
                 get: { store.selectedAlbum },
                 set: { store.select($0) }
             )) {
-                ForEach(store.albumGroups) { group in
+                ForEach(store.visibleGroups) { group in
                     Section(group.title) {
                         ForEach(group.albums) { album in
                             Label {
@@ -146,13 +147,25 @@ struct ContentView: View {
                 }
             }
             .navigationSplitViewColumnWidth(min: 220, ideal: 260)
+            .searchable(text: $store.albumFilter, placement: .sidebar, prompt: "Filter albums")
         } detail: {
             VStack(spacing: 0) {
-                PhotoGrid(store: store)
+                PhotoGrid(store: store, thumbSize: $thumbSize)
                 Divider()
-                controls
+                statusBar
             }
+            // Fills what was an empty title bar, and makes the window name itself in
+            // Mission Control and the window menu.
+            .navigationTitle(store.selectedAlbum?.title ?? "iCloud GUI")
+            .navigationSubtitle(subtitle)
+            .toolbar { toolbarContent }
         }
+    }
+
+    private var subtitle: String {
+        guard let album = store.selectedAlbum, album.notice == nil else { return "" }
+        let n = album.count
+        return "\(n.formatted()) item\(n == 1 ? "" : "s")"
     }
 
     /// What Download will actually fetch, after the album/selection and the "new only" filter.
@@ -162,89 +175,143 @@ struct ContentView: View {
         return pool.filter { dest.newAssetIDs.contains($0.localIdentifier) }
     }
 
-    private var controls: some View {
-        VStack(spacing: 10) {
-            // Destination gets a row to itself. Sharing one with the options squeezed
-            // the path into an unreadable "...ents/Photos_Download".
-            HStack(spacing: 10) {
-                Button { chooseDestination() } label: {
-                    Label("Destination", systemImage: "folder")
-                }
+    // MARK: - Window toolbar
 
-                if let root = dest.url {
-                    Button {
-                        NSWorkspace.shared.activateFileViewerSelecting([root])
-                    } label: {
-                        Text(abbreviate(root.path))
-                            .font(.callout)
-                            .lineLimit(1)
-                            // Middle keeps both the root and the folder name visible.
-                            .truncationMode(.middle)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .buttonStyle(.plain)
-                    .help("\(root.path)\n\nClick to reveal in Finder")
-
-                    if let free = availableBytes(at: root) {
-                        Text(ByteCountFormatter.string(fromByteCount: free, countStyle: .file)
-                             + " free")
-                            .font(.callout)
-                            // Under 25 GB will not hold a typical library.
-                            .foregroundStyle(free < 25_000_000_000 ? .orange : .secondary)
-                            .help("Space left on this volume. A full photo library commonly runs to several hundred gigabytes.")
-                            .fixedSize()
-                    }
-
-                    Button {
-                        store.loadAlbums()
-                        store.select(store.selectedAlbum)
-                        refresh()
-                    } label: { Image(systemName: "arrow.clockwise") }
-                        .help("Reload the library and re-scan the destination")
-                        .disabled(dest.isWorking)
-                } else {
-                    Text("No folder chosen")
-                        .font(.callout).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                Button { showGuide = true } label: { Image(systemName: "questionmark.circle") }
-                    .buttonStyle(.borderless)
-                    .help("Open the guide (⌘?)")
+    /// Grouping and sort order first, then the destination and the download action.
+    /// Before this they were four stacked rows under the grid while the title bar sat
+    /// empty. Kept deliberately short: every item added here is one the toolbar can
+    /// decide to hide behind "»" at the minimum window width, and Download must never
+    /// be the item it picks.
+    ///
+    /// Deliberately no ToolbarSpacer between the two halves: it needs the macOS 26 SDK
+    /// to compile, which would stop the project building on the macOS 15 runner CI uses
+    /// and on any contributor's Mac without Tahoe -- and SwiftUI groups these items into
+    /// the same Liquid Glass clusters without it. Nothing here is macOS 26-only; the
+    /// glass comes from the SDK version build.sh stamps, not from source.
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem {
+            Picker("", selection: $store.grouping) {
+                ForEach(DateGrouping.allCases) { Text($0.title).tag($0) }
             }
-
-            HStack(spacing: 12) {
-                Menu {
-                    Picker("Organise into", selection: $layoutRaw) {
-                        ForEach(FolderLayout.allCases) { Text($0.title).tag($0.rawValue) }
-                    }
-                    .pickerStyle(.inline)
-
-                    Divider()
-
-                    Toggle("Date-prefix filenames", isOn: $datePrefix)
-                    Toggle("Keep pre-edit originals", isOn: $includeOriginals)
-                    Toggle("Write Finder tags", isOn: $writeFinderTags)
-
-                    Divider()
-
-                    Toggle("Download new photos automatically", isOn: $autoDownload)
-                } label: {
-                    Label("File Options", systemImage: "slider.horizontal.3")
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 170)
+            .help("Group the grid by day, month, or year")
+        }
+        ToolbarItem {
+            Button {
+                store.newestFirst.toggle()
+            } label: {
+                Label(store.newestFirst ? "Newest first" : "Oldest first",
+                      systemImage: store.newestFirst ? "arrow.down" : "arrow.up")
+            }
+            .help("Flip the sort order")
+        }
+        ToolbarItem { destinationMenu }
+        ToolbarItem { fileOptionsMenu }
+        ToolbarItem {
+            Button { showGuide = true } label: {
+                Label("Guide", systemImage: "questionmark.circle")
+            }
+            .help("Open the guide (⌘?)")
+        }
+        ToolbarItem {
+            if downloader.progress.isRunning {
+                Button("Cancel", role: .cancel) { downloader.cancel() }
+            } else {
+                Button { startDownload() } label: {
+                    Label(downloadLabel, systemImage: "arrow.down.circle.fill")
+                        .labelStyle(.titleAndIcon)
                 }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(dest.url == nil || downloadTargets.isEmpty || dest.isWorking)
+            }
+        }
+    }
 
-                Text(optionsSummary)
-                    .font(.callout).foregroundStyle(.secondary)
+    /// One control for the destination folder, replacing what were three: a Destination
+    /// button, the path as a second button, and a separate rescan button.
+    private var destinationMenu: some View {
+        Menu {
+            Button("Choose Destination…") { chooseDestination() }
+            if let root = dest.url {
+                Button("Reveal in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([root])
+                }
+                Divider()
+                Button("Reload Library and Rescan") {
+                    store.loadAlbums()
+                    store.select(store.selectedAlbum)
+                    refresh()
+                }
+                .disabled(dest.isWorking)
+            }
+        } label: {
+            Label(dest.url?.lastPathComponent ?? "Destination", systemImage: "folder")
+                .labelStyle(.titleAndIcon)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: 150, alignment: .leading)
+        }
+        .help(dest.url.map { "Saving to \(abbreviate($0.path))" } ?? "Choose where to save")
+    }
+
+    private var fileOptionsMenu: some View {
+        Menu {
+            Picker("Organise into", selection: $layoutRaw) {
+                ForEach(FolderLayout.allCases) { Text($0.title).tag($0.rawValue) }
+            }
+            .pickerStyle(.inline)
+
+            Divider()
+
+            Toggle("Date-prefix filenames", isOn: $datePrefix)
+            Toggle("Keep pre-edit originals", isOn: $includeOriginals)
+            Toggle("Write Finder tags", isOn: $writeFinderTags)
+
+            Divider()
+
+            // Was a checkbox of its own in the old bottom panel. The Download button
+            // already says "Download 1,247 New" when it is on, so the visible control
+            // was repeating what the button said.
+            Toggle("Only download what is missing", isOn: $onlyNew)
+                .disabled(dest.plan == nil)
+            Toggle("Download new photos automatically", isOn: $autoDownload)
+        } label: {
+            Label("File Options", systemImage: "slider.horizontal.3")
+        }
+        .help(optionsSummary)
+    }
+
+    // MARK: - Status bar
+
+    private var statusBar: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 12) {
+                Button("Select All") { store.selectAll() }.disabled(store.assets.isEmpty)
+                Button("Select None") { store.selectNone() }.disabled(store.selection.isEmpty)
+                Text(selectionSummary).font(.callout).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.tail)
 
-                Spacer()
+                Spacer(minLength: 12)
 
-                Toggle("Only new", isOn: $onlyNew)
-                    .toggleStyle(.checkbox)
-                    .help("Skip anything already present in the destination folder.")
-                    .disabled(dest.plan == nil)
+                if dest.url == nil {
+                    Text("No destination folder chosen")
+                        .font(.callout).foregroundStyle(.secondary).fixedSize()
+                } else {
+                    destinationStatus
+                }
+
+                // Lives here rather than in the toolbar: at the minimum window width
+                // the toolbar was overflowing its trailing items -- Download included --
+                // into the "»" menu, and this is the one view control that is set once
+                // and left alone. The status bar has the room.
+                Divider().frame(height: 16)
+                Image(systemName: "photo").font(.caption2).foregroundStyle(.secondary)
+                Slider(value: $thumbSize, in: 84...220).frame(width: 90)
+                Image(systemName: "photo.fill").font(.body).foregroundStyle(.secondary)
             }
 
             // Shared albums hold Apple's downscaled copies, not the originals. Measured
@@ -260,72 +327,28 @@ struct ContentView: View {
                 }
             }
 
-            if dest.url != nil {
+            if downloader.progress.isRunning {
                 HStack(spacing: 8) {
-                    if dest.isWorking {
-                        ProgressView().controlSize(.small)
-                    } else if let plan = dest.plan {
-                        Image(systemName: plan.isEmpty
-                              ? "checkmark.circle.fill" : "arrow.down.circle")
-                            .foregroundStyle(plan.isEmpty ? .green : .accentColor)
-                    }
-                    Text(dest.statusText).font(.callout)
-                        .foregroundStyle(dest.isWorking ? .secondary : .primary)
-                        .lineLimit(1).truncationMode(.tail)
-                    if autoDownloadHeldBack {
-                        Text("· too many for an automatic run, click Download")
-                            .font(.callout).foregroundStyle(.orange).lineLimit(1)
-                    }
-                    if store.arrivedSinceOpen > 0 {
-                        Text("· \(store.arrivedSinceOpen) arrived since opening")
-                            .font(.callout).foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    Spacer()
-                }
-            }
-
-            HStack(spacing: 12) {
-                Button("Select All") { store.selectAll() }.disabled(store.assets.isEmpty)
-                Button("Select None") { store.selectNone() }.disabled(store.selection.isEmpty)
-                Text(selectionSummary).font(.callout).foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.tail)
-
-                Spacer()
-
-                if downloader.progress.isRunning {
                     ProgressView(value: Double(downloader.progress.completed),
                                  total: Double(max(downloader.progress.total, 1)))
                         .frame(width: 160)
                     Text("\(downloader.progress.completed)/\(downloader.progress.total)")
                         .monospacedDigit().font(.callout).foregroundStyle(.secondary)
-                    Button("Cancel", role: .cancel) { downloader.cancel() }
-                } else {
-                    Button { startDownload() } label: {
-                        Label(downloadLabel, systemImage: "arrow.down.circle.fill")
-                    }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(dest.url == nil || downloadTargets.isEmpty || dest.isWorking)
-                }
-            }
-
-            if downloader.progress.isRunning, !downloader.progress.currentFile.isEmpty {
-                HStack(spacing: 8) {
-                    Text(downloader.progress.currentFile)
-                        .font(.caption).foregroundStyle(.secondary)
-                        .lineLimit(1).truncationMode(.middle)
-                    // Large videos otherwise sit at one item with no movement for
-                    // minutes; this is the only sign the transfer is alive.
-                    if let fraction = downloader.progress.currentFileFraction {
-                        ProgressView(value: fraction).frame(width: 110).controlSize(.small)
-                        Text("\(Int(fraction * 100))%")
-                            .font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                    if !downloader.progress.currentFile.isEmpty {
+                        Text(downloader.progress.currentFile)
+                            .font(.caption).foregroundStyle(.secondary)
+                            .lineLimit(1).truncationMode(.middle)
+                        // Large videos otherwise sit at one item with no movement for
+                        // minutes; this is the only sign the transfer is alive.
+                        if let fraction = downloader.progress.currentFileFraction {
+                            ProgressView(value: fraction).frame(width: 90).controlSize(.small)
+                            Text("\(Int(fraction * 100))%")
+                                .font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                        }
                     }
                     Spacer()
                 }
-            }
-
-            if let message = downloader.progress.finishedMessage, !downloader.progress.isRunning {
+            } else if let message = downloader.progress.finishedMessage {
                 HStack {
                     Text(message).font(.callout)
                     if !downloader.failures.isEmpty {
@@ -335,7 +358,8 @@ struct ContentView: View {
                 }
             }
         }
-        .padding(14)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
         .sheet(isPresented: $showFailures) {
             FailureList(failures: downloader.failures, logFolder: dest.url) {
                 showFailures = false
@@ -344,6 +368,37 @@ struct ContentView: View {
         .onChange(of: downloader.progress.isRunning) { wasRunning, isRunning in
             // A finished run changes what the destination holds, so the counts are stale.
             if wasRunning, !isRunning { refresh() }
+        }
+    }
+
+    /// What is missing at the destination, and whether it will fit.
+    @ViewBuilder
+    private var destinationStatus: some View {
+        if dest.isWorking {
+            ProgressView().controlSize(.small)
+        } else if let plan = dest.plan {
+            Image(systemName: plan.isEmpty ? "checkmark.circle.fill" : "arrow.down.circle")
+                .foregroundStyle(plan.isEmpty ? .green : .accentColor)
+        }
+        Text(dest.statusText).font(.callout)
+            .foregroundStyle(dest.isWorking ? .secondary : .primary)
+            .lineLimit(1).truncationMode(.tail)
+        if autoDownloadHeldBack {
+            Text("· too many for an automatic run, click Download")
+                .font(.callout).foregroundStyle(.orange).lineLimit(1)
+        }
+        if store.arrivedSinceOpen > 0 {
+            Text("· \(store.arrivedSinceOpen) arrived since opening")
+                .font(.callout).foregroundStyle(.secondary).lineLimit(1)
+        }
+        if let root = dest.url, let free = availableBytes(at: root) {
+            Text("· " + ByteCountFormatter.string(fromByteCount: free, countStyle: .file)
+                 + " free")
+                .font(.callout)
+                // Under 25 GB will not hold a typical library.
+                .foregroundStyle(free < 25_000_000_000 ? .orange : .secondary)
+                .help("Space left on this volume. A full photo library commonly runs to several hundred gigabytes.")
+                .fixedSize()
         }
     }
 
@@ -360,7 +415,8 @@ struct ContentView: View {
     private var downloadLabel: String {
         let n = downloadTargets.count
         if n == 0 { return onlyNew && dest.plan != nil ? "Nothing New" : "Download" }
-        return onlyNew && dest.plan != nil ? "Download \(n) New" : "Download \(n)"
+        let count = n.formatted()
+        return onlyNew && dest.plan != nil ? "Download \(count) New" : "Download \(count)"
     }
 
     private var selectionSummary: String {

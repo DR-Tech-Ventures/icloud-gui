@@ -11,7 +11,9 @@ struct iCloudGUIApp: App {
         if CommandLine.arguments.contains("--extras") { Probe.extras() }
         if CommandLine.arguments.contains("--size") { Probe.size() }
         if CommandLine.arguments.contains("--tags") { Probe.tags() }
+        if CommandLine.arguments.contains("--updates") { Updates.probe() }
         Demo.enabled = CommandLine.arguments.contains("--demo")
+        Log.armLifecycle()
         Shot.arm()
     }
 
@@ -19,11 +21,19 @@ struct iCloudGUIApp: App {
         WindowGroup("iCloud GUI") {
             ContentView()
         }
+        // Comfortably above ContentView's 1180pt minimum, which is itself set by what
+        // the toolbar needs: narrower than that and SwiftUI folds trailing items into
+        // the "»" overflow menu, Download first. This is the size the window opens at
+        // the first time; after that macOS restores whatever the user left.
+        .defaultSize(width: 1280, height: 840)
         .windowToolbarStyle(.unified)
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandGroup(replacing: .appInfo) {
                 Button("About iCloud GUI") { About.show() }
+                // The one place the app touches the network, and only when clicked --
+                // see the note at the top of Updates.swift.
+                Button("Check for Updates…") { Updates.check() }
             }
             // Replaces the default Help item so the guide is where people look for it.
             CommandGroup(replacing: .help) {
