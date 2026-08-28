@@ -319,7 +319,9 @@ struct ContentView: View {
         }
         .padding(14)
         .sheet(isPresented: $showFailures) {
-            FailureList(failures: downloader.failures) { showFailures = false }
+            FailureList(failures: downloader.failures, logFolder: dest.url) {
+                showFailures = false
+            }
         }
         .onChange(of: downloader.progress.isRunning) { wasRunning, isRunning in
             // A finished run changes what the destination holds, so the counts are stale.
@@ -409,11 +411,14 @@ struct PermissionView: View {
 
 struct FailureList: View {
     let failures: [DownloadFailure]
+    var logFolder: URL?
     let dismiss: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("\(failures.count) item\(failures.count == 1 ? "" : "s") failed").font(.headline)
+            Text("Also written to \(RunLog.filename) in the destination folder, so this list survives quitting.")
+                .font(.callout).foregroundStyle(.secondary)
             List(failures) { failure in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(failure.filename).font(.callout).bold()
@@ -421,7 +426,16 @@ struct FailureList: View {
                 }
             }
             .frame(minWidth: 460, minHeight: 260)
-            HStack { Spacer(); Button("Done", action: dismiss).keyboardShortcut(.defaultAction) }
+            HStack {
+                if let logFolder {
+                    Button("Show Log in Finder") {
+                        NSWorkspace.shared.activateFileViewerSelecting(
+                            [logFolder.appendingPathComponent(RunLog.filename)])
+                    }
+                }
+                Spacer()
+                Button("Done", action: dismiss).keyboardShortcut(.defaultAction)
+            }
         }
         .padding(16)
     }

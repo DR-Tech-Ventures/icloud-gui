@@ -238,6 +238,7 @@ enum SelfCheck {
                "with a ledger, photo B is correctly matched to its own file")
 
         checkLedgerRoundTrip()
+        checkRunLog()
     }
 
     private static func checkLedgerRoundTrip() {
@@ -270,6 +271,42 @@ enum SelfCheck {
                             existing: ["2024/2024-03-15/IMG_1.HEIC"])
                == ["2024/2024-03-15/IMG_1 (2).HEIC"],
                "a deleted photo is re-fetched after pruning")
+    }
+
+    private static func checkRunLog() {
+        let fm = FileManager.default
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("icg-log-\(UUID().uuidString)")
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: dir) }
+
+        let log = RunLog(destination: dir)
+        log.started(items: 1200, options: "dateFolders tags")
+        log.failed(filename: "IMG_1.HEIC", assetID: "ABC-123", reason: "Network unavailable")
+        log.failed(filename: "IMG_2.MOV", assetID: "DEF-456", reason: "Timed out")
+        log.finished("Downloaded 1198 items · 2 failed.")
+
+        let text = (try? String(contentsOf: dir.appendingPathComponent(RunLog.filename),
+                                encoding: .utf8)) ?? ""
+        let lines = text.split(separator: "\n")
+        expect(lines.count == 4, "one line per event, got \(lines.count)")
+        expect(text.contains("RUN START"), "run start recorded")
+        expect(text.contains("RUN END"), "run end recorded")
+
+        // The point of the file: which items failed, and why, survives quitting.
+        expect(text.contains("IMG_1.HEIC") && text.contains("Network unavailable"),
+               "failed filename and reason are both recorded")
+        expect(text.contains("ABC-123"),
+               "the asset identifier is recorded, so a failure can be traced back")
+        expect(lines.filter { $0.contains("FAILED") }.count == 2, "both failures recorded")
+
+        // Appends across runs rather than truncating -- history matters for a backup.
+        RunLog(destination: dir).started(items: 5, options: "flat")
+        let after = (try? String(contentsOf: dir.appendingPathComponent(RunLog.filename),
+                                 encoding: .utf8)) ?? ""
+        expect(after.split(separator: "\n").count == 5,
+               "a second run appends rather than truncating")
+        expect(after.contains("IMG_1.HEIC"), "earlier failures are not lost")
     }
 
     // MARK: - Destination scanner

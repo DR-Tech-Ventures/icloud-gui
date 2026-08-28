@@ -185,8 +185,12 @@ func applyTimestamps(to url: URL, creationDate: Date?) {
 /// SMB shares usually do too, though some store them in AppleDouble `._` sidecars and
 /// others reject them outright. A tag that will not stick must never fail a download
 /// that otherwise succeeded, so errors are deliberately swallowed.
-func applyFinderTags(to url: URL, tags: [String]) {
-    guard !tags.isEmpty else { return }
+/// Returns false if tags were requested but could not be written -- a share that
+/// rejects extended attributes, most likely. The caller records that rather than
+/// letting it pass silently, which is how a broken tagging feature shipped once.
+@discardableResult
+func applyFinderTags(to url: URL, tags: [String]) -> Bool {
+    guard !tags.isEmpty else { return true }
     let names = Array(Set(tags)).sorted()   // stable, de-duplicated
 
     // Written as the extended attribute Finder itself reads, on every macOS version.
@@ -196,14 +200,15 @@ func applyFinderTags(to url: URL, tags: [String]) {
     // compiled against. Gating it still breaks the build on an older toolchain -- which
     // is exactly how CI caught this, having compiled clean on a macOS 27 SDK locally.
     guard let data = try? PropertyListSerialization.data(
-        fromPropertyList: names, format: .binary, options: 0) else { return }
-    _ = url.withUnsafeFileSystemRepresentation { path -> Int32 in
+        fromPropertyList: names, format: .binary, options: 0) else { return false }
+    let result = url.withUnsafeFileSystemRepresentation { path -> Int32 in
         guard let path else { return -1 }
         return data.withUnsafeBytes { buffer in
             setxattr(path, "com.apple.metadata:_kMDItemUserTags",
                      buffer.baseAddress, data.count, 0, 0)
         }
     }
+    return result == 0
 }
 
 /// Appends " (2)", " (3)"... until `isTaken` says the name is free.

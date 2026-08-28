@@ -12,27 +12,30 @@ extension Notification.Name {
 enum Shot {
     static func arm() {
         let args = CommandLine.arguments
-        guard let i = args.firstIndex(of: "--shot") else { return }
-        let size = i + 1 < args.count ? parse(args[i + 1]) : nil
-        let out = URL(fileURLWithPath: "/tmp/icg-shot.png")
 
-        // Optional: select a named album before capturing, so a screenshot can show
-        // something other than whatever loads first.
+        // --album / --group are useful on their own, not only when capturing, so they
+        // are handled before the --shot guard.
+
         let wanted: String? = args.firstIndex(of: "--album").flatMap {
             $0 + 1 < args.count ? args[$0 + 1] : nil
         }
         let grouping: String? = args.firstIndex(of: "--group").flatMap {
             $0 + 1 < args.count ? args[$0 + 1] : nil
         }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
-            if let wanted {
-                NotificationCenter.default.post(name: .selectAlbumForShot, object: wanted)
-            }
-            if let grouping {
-                NotificationCenter.default.post(name: .setGroupingForShot, object: grouping)
+        if wanted != nil || grouping != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
+                if let wanted {
+                    NotificationCenter.default.post(name: .selectAlbumForShot, object: wanted)
+                }
+                if let grouping {
+                    NotificationCenter.default.post(name: .setGroupingForShot, object: grouping)
+                }
             }
         }
+
+        guard let i = args.firstIndex(of: "--shot") else { return }
+        let size = i + 1 < args.count ? parse(args[i + 1]) : nil
+        let out = URL(fileURLWithPath: "/tmp/icg-shot.png")
         DispatchQueue.main.asyncAfter(deadline: .now() + 9) {
             if args.contains("--about") { About.show() }
             guard let main = NSApp.windows.first(where: { $0.isVisible }) else { exit(3) }

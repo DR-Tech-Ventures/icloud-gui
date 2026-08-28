@@ -148,6 +148,59 @@ struct DownloadLedger {
     }
 }
 
+/// Append-only record of what each run did, kept beside the ledger.
+///
+/// The ledger records successes. Without this, failures live only in `@Published`
+/// state and vanish when the app quits — so a run that silently drops forty photos
+/// overnight leaves no evidence of which forty. For a backup tool, what did *not* make
+/// it matters as much as what did.
+///
+/// Written unbuffered: a crash mid-run must not take the record of the failures with it.
+struct RunLog {
+    static let filename = ".icloudgui-log.txt"
+    private let url: URL
+
+    init(destination: URL) {
+        url = destination.appendingPathComponent(Self.filename)
+    }
+
+    private static let stamp: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    func started(items: Int, options: String) {
+        append("RUN START\t\(items) items\t\(options)")
+    }
+
+    func failed(filename: String, assetID: String, reason: String) {
+        append("FAILED\t\(filename)\t\(assetID)\t\(reason)")
+    }
+
+    func finished(_ summary: String) {
+        append("RUN END\t\(summary)")
+    }
+
+    func note(_ detail: String) {
+        append("NOTE\t\(detail)")
+    }
+
+    private func append(_ line: String) {
+        let row = "\(Self.stamp.string(from: Date()))\t\(line)\n"
+        guard let data = row.data(using: .utf8) else { return }
+        if let handle = try? FileHandle(forWritingTo: url) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+        } else {
+            try? FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? data.write(to: url)
+        }
+    }
+}
+
 // MARK: - Destination scan
 
 enum DestinationScanner {

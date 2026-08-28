@@ -17,6 +17,7 @@ struct DownloadProgress {
 struct DownloadFailure: Identifiable {
     let id = UUID()
     let filename: String
+    let assetID: String
     let reason: String
 }
 
@@ -27,6 +28,9 @@ final class Downloader: ObservableObject {
 
     private var task: Task<Void, Never>?
     private var ledger: DownloadLedger?
+    private var log: RunLog?
+    private var tagsRequested = 0
+    private var tagsWritten = 0
 
     /// iCloud throttles aggressive parallel pulls, and each in-flight resource
     /// buffers on disk. Four is comfortably faster than serial without tripping it.
@@ -48,6 +52,14 @@ final class Downloader: ObservableObject {
         failures = []
         progress = DownloadProgress(total: assets.count, isRunning: true)
         ledger = DownloadLedger(destination: destination)
+        log = RunLog(destination: destination)
+        tagsRequested = 0
+        tagsWritten = 0
+        log?.started(items: assets.count,
+                     options: [layout.rawValue,
+                               datePrefix ? "dated-names" : "plain-names",
+                               includeUnmodifiedOriginals ? "with-originals" : "edited-only",
+                               writeFinderTags ? "tags" : "no-tags"].joined(separator: " "))
 
         task = Task { [weak self] in
             await self?.run(assets: assets,
@@ -131,6 +143,11 @@ final class Downloader: ObservableObject {
         progress.finishedMessage = Task.isCancelled
             ? "Cancelled after \(progress.completed) item\(progress.completed == 1 ? "" : "s")."
             : summary()
+        // Tagging failing quietly is how a broken feature shipped; say so either way.
+        if writeFinderTags {
+            log?.note("Finder tags written on \(tagsWritten) of \(tagsRequested) files")
+        }
+        log?.finished(progress.finishedMessage ?? "")
     }
 
     /// Live progress for the file currently streaming.
@@ -147,6 +164,8 @@ final class Downloader: ObservableObject {
 
     private func apply(_ outcome: AssetOutcome) {
         progress.completed += 1
+        tagsRequested += outcome.tagsRequested
+        tagsWritten += outcome.tagsWritten
         progress.skipped += outcome.skipped
         progress.bytesWritten += outcome.bytes
         if let name = outcome.lastFilename { progress.currentFile = name }
@@ -157,6 +176,9 @@ final class Downloader: ObservableObject {
         for failure in outcome.failures {
             progress.failed += 1
             failures.append(failure)
+            log?.failed(filename: failure.filename,
+                        assetID: failure.assetID,
+                        reason: failure.reason)
         }
     }
 
@@ -185,6 +207,8 @@ final class Downloader: ObservableObject {
         var failures: [DownloadFailure] = []
         var written: [WrittenFile] = []
         var lastFilename: String?
+        var tagsRequested = 0
+        var tagsWritten = 0
     }
 
     private nonisolated static func download(
@@ -228,12 +252,17 @@ final class Downloader: ObservableObject {
                                               tags: tags,
                                               onProgress: { onFileProgress(name, $0) })
                 outcome.bytes += written.bytes
+                if written.tagCount > 0 {
+                    outcome.tagsRequested += 1
+                    if written.tagged { outcome.tagsWritten += 1 }
+                }
                 // Record the path actually used -- uniqueURL may have disambiguated it.
                 outcome.written.append(WrittenFile(assetID: asset.localIdentifier,
                                                    relativePath: written.relativePath))
             } catch {
                 outcome.failures.append(
                     DownloadFailure(filename: (relative as NSString).lastPathComponent,
+                                    assetID: asset.localIdentifier,
                                     reason: error.localizedDescription))
             }
         }
@@ -243,6 +272,8 @@ final class Downloader: ObservableObject {
     private struct WriteResult {
         let bytes: Int64
         let relativePath: String
+        let tagged: Bool
+        let tagCount: Int
     }
 
     /// Streams one resource to disk. Writes to a sibling `.part` file and renames
@@ -277,12 +308,14 @@ final class Downloader: ObservableObject {
 
         try fm.moveItem(at: partURL, to: finalURL)
         applyTimestamps(to: finalURL, creationDate: creationDate)
-        applyFinderTags(to: finalURL, tags: tags)
+        let tagged = applyFinderTags(to: finalURL, tags: tags)
         let attributes = try? fm.attributesOfItem(atPath: finalURL.path)
         let prefix = root.standardizedFileURL.path + "/"
         let full = finalURL.standardizedFileURL.path
         let relative = full.hasPrefix(prefix) ? String(full.dropFirst(prefix.count))
                                               : finalURL.lastPathComponent
-        return WriteResult(bytes: (attributes?[.size] as? Int64) ?? 0, relativePath: relative)
+        return WriteResult(bytes: (attributes?[.size] as? Int64) ?? 0,
+                           relativePath: relative,
+                           tagged: tagged, tagCount: tags.count)
     }
 }

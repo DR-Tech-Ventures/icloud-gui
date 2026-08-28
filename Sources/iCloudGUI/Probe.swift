@@ -231,6 +231,34 @@ enum Probe {
         exit(0)
     }
 
+    /// Diagnostic: is the album membership index actually populated?
+    static func tags() -> Never {
+        var lines: [String] = []
+        func note(_ s: String) { lines.append(s); print(s) }
+
+        let index = buildAlbumMembershipIndex()
+        note("index entries: \(index.count)")
+        if let sample = index.first {
+            note("sample: \(sample.key) -> \(sample.value.joined(separator: ", "))")
+        }
+
+        // The exact asset the end-to-end test downloaded.
+        let target = "8463F8E6-DFF2-493E-88CA-E8948C106317/L0/001"
+        note("target in index: \(index[target] ?? ["NOT FOUND"])")
+
+        let fetched = PHAsset.fetchAssets(withLocalIdentifiers: [target], options: nil)
+        if let asset = fetched.firstObject {
+            note("asset found, favourite=\(asset.isFavorite)")
+            note("finderTags() -> \(finderTags(for: asset, albumIndex: index))")
+        } else {
+            note("asset NOT fetchable by identifier")
+        }
+
+        try? lines.joined(separator: "\n").write(
+            to: URL(fileURLWithPath: "/tmp/icg-tags.txt"), atomically: true, encoding: .utf8)
+        exit(0)
+    }
+
     static func run() {
         let out = URL(fileURLWithPath: "/tmp/icloudgui-probe.txt")
         var log: [String] = []
