@@ -168,8 +168,13 @@ struct ContentView: View {
         }
     }
 
+    /// Always non-empty. An empty subtitle makes macOS draw the title as a single
+    /// centred line instead of a stacked title and subtitle, so letting it go blank
+    /// resized and re-positioned the album name every time the selection moved to or
+    /// from an unreadable album.
     private var subtitle: String {
-        guard let album = store.selectedAlbum, album.notice == nil else { return "" }
+        guard let album = store.selectedAlbum else { return "No album selected" }
+        guard album.notice == nil else { return "Unavailable to other apps" }
         let n = album.count
         return "\(n.formatted()) item\(n == 1 ? "" : "s")"
     }
@@ -189,11 +194,23 @@ struct ContentView: View {
     /// decide to hide behind "»" at the minimum window width, and Download must never
     /// be the item it picks.
     ///
-    /// The ToolbarSpacer splits this into two Liquid Glass groups. It needs the macOS 26
-    /// SDK, which the deployment target now guarantees; before that it was left out so
-    /// the project would still build on older toolchains.
+    /// The ToolbarSpacers split this into two Liquid Glass groups and pin both of them
+    /// to the trailing edge. They need the macOS 26 SDK, which the deployment target now
+    /// guarantees; before that they were left out so the project would still build on
+    /// older toolchains.
+    ///
+    /// The leading flexible spacer is what keeps the row still. A unified toolbar lays
+    /// its items out after the window title, so with the controls packed against the
+    /// title every album change -- "Recents" to "Recently Added" -- slid the whole row
+    /// sideways by the difference in the two names. Absorbing that slack in one flexible
+    /// spacer leaves the title free to grow leftwards into empty space while the
+    /// controls stay where they are. There is exactly one flexible spacer for that
+    /// reason: a second one would split the slack between them and put half the movement
+    /// back.
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        ToolbarSpacer(.flexible)
+
         ToolbarItem {
             Picker("", selection: $store.grouping) {
                 ForEach(DateGrouping.allCases) { Text($0.title).tag($0) }
@@ -213,9 +230,9 @@ struct ContentView: View {
             .help("Flip the sort order")
         }
         // Splits the view controls from the destination and download cluster into two
-        // Liquid Glass groups. Needs the macOS 26 SDK to compile, which is now the
-        // deployment target.
-        ToolbarSpacer(.flexible)
+        // Liquid Glass groups. Fixed rather than flexible: the flexible one above
+        // already claims the slack, and two of them would share it.
+        ToolbarSpacer(.fixed)
 
         ToolbarItem { destinationMenu }
         ToolbarItem { fileOptionsMenu }
@@ -227,11 +244,17 @@ struct ContentView: View {
         }
         ToolbarItem {
             if downloader.progress.isRunning {
-                Button("Cancel", role: .cancel) { downloader.cancel() }
+                Button(role: .cancel) { downloader.cancel() } label: {
+                    Text("Cancel").frame(width: Self.downloadButtonWidth)
+                }
             } else {
                 Button { startDownload() } label: {
                     Label(downloadLabel, systemImage: "arrow.down.circle.fill")
                         .labelStyle(.titleAndIcon)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .frame(width: Self.downloadButtonWidth)
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
@@ -420,6 +443,17 @@ struct ContentView: View {
         if autoDownload { parts.append("auto") }
         return parts.joined(separator: " · ")
     }
+
+    /// Reserved width for the download/cancel button. The label carries a count, and
+    /// that count arrives a moment after the album does -- the fetch runs off the main
+    /// actor -- so a button sized to its text resized itself just after every album
+    /// change, dragging the three controls to its left along with it. Fixed at the
+    /// width of a six-figure count.
+    ///
+    /// ponytail: measured once, not laid out. A label wider than this scales down by
+    /// up to 15% rather than widening the button; past a seven-figure count it would
+    /// start to look shrunken, at which point the count belongs in the status bar.
+    private static let downloadButtonWidth: CGFloat = 156
 
     private var downloadLabel: String {
         let n = downloadTargets.count

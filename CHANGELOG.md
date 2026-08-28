@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.3.1
+
+**The toolbar stops shifting when you change album.**
+
+- **The toolbar no longer slides sideways with the album name.** A unified toolbar lays
+  its items out after the window title, so the grouping picker and the sort button sat a
+  different distance from the left edge for every album — "Recents" and "Recently Added"
+  moved the whole row by the width of eight characters. The controls are now anchored to
+  the trailing edge by a single flexible `ToolbarSpacer`, and the title grows into the
+  empty space beside them instead of pushing them.
+- **The download button keeps one width.** Its label carries a count, and the count
+  arrives a moment after the album does because the fetch runs off the main actor — so
+  the button resized itself just after every album change, dragging the three controls
+  to its left along with it. It is now fixed at the width of a six-figure count.
+- **The subtitle is never blank.** An empty subtitle makes macOS draw the title as a
+  single centred line rather than a stacked title and subtitle, so selecting Hidden or
+  Recently Deleted changed the size and baseline of the album name. Those albums now say
+  "Unavailable to other apps" and the title stays put.
+
 ## 1.3
 
 **Requires macOS 26. The app icon is now layered and drawn by the system.**
