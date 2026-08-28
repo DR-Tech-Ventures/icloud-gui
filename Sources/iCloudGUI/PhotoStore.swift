@@ -104,34 +104,11 @@ final class PhotoStore: NSObject, ObservableObject {
         var groups: [AlbumGroup] = []
 
         // --- Library ---
-        var library: [Album] = [
+        groups.append(AlbumGroup(id: "library", title: "Library", albums: [
             Album(id: "__all__", title: "All Photos",
                   count: PHAsset.fetchAssets(with: nil).count,
                   symbol: "photo.on.rectangle.angled", collection: nil)
-        ]
-        let hiddenOptions = PHFetchOptions()
-        hiddenOptions.includeHiddenAssets = true
-        PHAssetCollection.fetchAssetCollections(with: .smartAlbum,
-                                                subtype: .smartAlbumAllHidden,
-                                                options: nil)
-            .enumerateObjects { collection, _, _ in
-                let count = PHAsset.fetchAssets(in: collection, options: hiddenOptions).count
-                library.append(Album(id: collection.localIdentifier,
-                                     title: collection.localizedTitle ?? "Hidden",
-                                     count: count,
-                                     symbol: "eye.slash",
-                                     collection: collection,
-                                     includesHidden: true,
-                                     notice: count == 0 ? .hiddenLocked : nil))
-            }
-
-        // Listed deliberately even though PhotoKit cannot read it. Omitting it silently
-        // makes an Apple restriction look like a missing feature, and this is the first
-        // place someone goes looking.
-        library.append(Album(id: "__recently_deleted__", title: "Recently Deleted",
-                             count: 0, symbol: "trash.slash", collection: nil,
-                             notice: .recentlyDeleted))
-        groups.append(AlbumGroup(id: "library", title: "Library", albums: library))
+        ]))
 
         // --- Smart albums ---
         // Fetched with .any rather than a fixed list, so undocumented-but-real
@@ -224,6 +201,32 @@ final class PhotoStore: NSObject, ObservableObject {
             groups.append(AlbumGroup(id: "shared", title: "Shared Albums",
                                      albums: shared.sorted(by: byName)))
         }
+
+        // --- Utilities, last ---
+        // Hidden is a real smart album (subtype 205); Recently Deleted is not a
+        // collection at all and is synthesised here. Both usually read "—" because
+        // macOS withholds them, so they sit at the bottom rather than directly under
+        // All Photos, where two dashes read as something being broken.
+        var utilities: [Album] = []
+        let hiddenOptions = PHFetchOptions()
+        hiddenOptions.includeHiddenAssets = true
+        PHAssetCollection.fetchAssetCollections(with: .smartAlbum,
+                                                subtype: .smartAlbumAllHidden,
+                                                options: nil)
+            .enumerateObjects { collection, _, _ in
+                let count = PHAsset.fetchAssets(in: collection, options: hiddenOptions).count
+                utilities.append(Album(id: collection.localIdentifier,
+                                       title: collection.localizedTitle ?? "Hidden",
+                                       count: count,
+                                       symbol: "eye.slash",
+                                       collection: collection,
+                                       includesHidden: true,
+                                       notice: count == 0 ? .hiddenLocked : nil))
+            }
+        utilities.append(Album(id: "__recently_deleted__", title: "Recently Deleted",
+                               count: 0, symbol: "trash.slash", collection: nil,
+                               notice: .recentlyDeleted))
+        groups.append(AlbumGroup(id: "utilities", title: "Utilities", albums: utilities))
 
         albumGroups = groups
         albums = groups.flatMap(\.albums)

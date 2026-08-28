@@ -83,13 +83,27 @@ struct ContentView: View {
                          writeFinderTags: writeFinderTags)
     }
 
+    /// Above this, an automatic run is a backup rather than a top-up, and wants a
+    /// deliberate click. Without the cap, enabling auto-download before a first full
+    /// backup would silently begin transferring an entire library — hundreds of
+    /// gigabytes, unattended, with no one watching the free space.
+    private static let autoDownloadLimit = 200
+
     /// Starts a download when new photos land, if the user asked for that.
     private func maybeAutoDownload(_ ids: Set<String>) {
         guard autoDownload, !ids.isEmpty, dest.url != nil,
               !downloader.progress.isRunning, !dest.isWorking,
               ids != lastAutoAttempt else { return }
         lastAutoAttempt = ids
+        guard downloadTargets.count <= Self.autoDownloadLimit else { return }
         startDownload()
+    }
+
+    /// Shown when auto-download declined to start because the batch was too large.
+    private var autoDownloadHeldBack: Bool {
+        autoDownload && dest.plan != nil && !downloadTargets.isEmpty
+            && downloadTargets.count > Self.autoDownloadLimit
+            && !downloader.progress.isRunning
     }
 
     private func refresh() {
@@ -258,6 +272,10 @@ struct ContentView: View {
                     Text(dest.statusText).font(.callout)
                         .foregroundStyle(dest.isWorking ? .secondary : .primary)
                         .lineLimit(1).truncationMode(.tail)
+                    if autoDownloadHeldBack {
+                        Text("· too many for an automatic run, click Download")
+                            .font(.callout).foregroundStyle(.orange).lineLimit(1)
+                    }
                     if store.arrivedSinceOpen > 0 {
                         Text("· \(store.arrivedSinceOpen) arrived since opening")
                             .font(.callout).foregroundStyle(.secondary)

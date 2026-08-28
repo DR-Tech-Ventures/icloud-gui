@@ -194,12 +194,17 @@ existing 200 GB backup is a job for `mv`, not a re-download.
 
 The sidebar is grouped and sorted:
 
-- **Library** — All Photos, Hidden, Recently Deleted
+- **Library** — All Photos
 - **Smart Albums** — Favorites, Recently Added, Videos, Live Photos, Selfies,
   Screenshots, Screen Recordings, Panoramas, Bursts, Slo-mo, Time-lapse, RAW,
   Cinematic, Portrait, Long Exposure, Animated (empty ones are omitted)
 - **My Albums** — your own albums, alphabetical
 - **Shared Albums** — iCloud Shared Albums, alphabetical
+- **Utilities** — Hidden and Recently Deleted
+
+Hidden is a real smart album; Recently Deleted is not a collection PhotoKit exposes at
+all, and is listed anyway so an Apple restriction does not look like a missing feature.
+Both usually read **—**, so they sit at the bottom rather than directly under All Photos.
 
 ### Hidden — supported, but macOS may be withholding them
 
@@ -391,6 +396,10 @@ triggers a download of everything still missing — which can be hundreds of gig
 
 If an item fails repeatedly it is not retried in a loop: the app remembers the set it
 last auto-started on and will not restart on the same one.
+
+**Automatic runs are capped at 200 items.** Above that the app says so and waits for a
+click, rather than beginning a several-hundred-gigabyte transfer unattended — which is
+what enabling this before a first full backup would otherwise do.
 
 ## Browsing by date
 
