@@ -31,6 +31,12 @@ struct ContentView: View {
         }
         .frame(minWidth: 1180, minHeight: 700)
         .task {
+            // Let the window get on screen before the library work starts. Loading a
+            // 35,000-asset library is most of a second of PhotoKit queries on the main
+            // actor, and doing it inside the first render meant the window itself did
+            // not appear until it finished. The content arrives at the same moment
+            // either way; the difference is whether anything is on screen while it does.
+            try? await Task.sleep(for: .milliseconds(1))
             if store.isAuthorized { store.loadAlbums() }
             if !destinationPath.isEmpty { dest.url = URL(fileURLWithPath: destinationPath) }
             refresh()

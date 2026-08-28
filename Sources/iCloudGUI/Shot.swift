@@ -28,14 +28,13 @@ enum Shot {
         let grouping: String? = args.firstIndex(of: "--group").flatMap {
             $0 + 1 < args.count ? args[$0 + 1] : nil
         }
-        if wanted != nil || grouping != nil {
+        // Without --shot there is no capture to synchronise with, so these still go out
+        // on a timer. With --shot they are applied below instead, once the window is
+        // actually up -- a fixed timer and a capture that no longer waits a fixed time
+        // are a race, and the losing side is a screenshot showing the wrong grouping.
+        if (wanted != nil || grouping != nil) && !args.contains("--shot") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
-                if let wanted {
-                    NotificationCenter.default.post(name: .selectAlbumForShot, object: wanted)
-                }
-                if let grouping {
-                    NotificationCenter.default.post(name: .setGroupingForShot, object: grouping)
-                }
+                apply(album: wanted, grouping: grouping)
             }
         }
 
@@ -53,6 +52,9 @@ enum Shot {
                     "no visible window appeared within 40s\n".data(using: .utf8)!)
                 exit(3)
             }
+            // Applied here, not on a timer: the window exists, so the selection lands
+            // before the settle below rather than racing the capture.
+            apply(album: wanted, grouping: grouping)
             if args.contains("--about") { About.show() }
             // A sheet is a child window; the About panel is a separate key window.
             let window = main.attachedSheet
@@ -71,6 +73,16 @@ enum Shot {
             try? await Task.sleep(for: .seconds(1))
             await capture(window, to: out)
             exit(0)
+        }
+    }
+
+    @MainActor
+    private static func apply(album: String?, grouping: String?) {
+        if let album {
+            NotificationCenter.default.post(name: .selectAlbumForShot, object: album)
+        }
+        if let grouping {
+            NotificationCenter.default.post(name: .setGroupingForShot, object: grouping)
         }
     }
 

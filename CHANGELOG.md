@@ -15,6 +15,23 @@
   that happened not to fire.
 - **The toolbar's two halves are now separate Liquid Glass groups**, via `ToolbarSpacer`.
   It needs the macOS 26 SDK, which is why 1.2 left it out.
+- **The window appears about three times sooner** — 1.5 seconds to 0.47 on a
+  35,000-asset library. Every PhotoKit query now runs off the main actor: enumerating
+  the 77 albums, fetching the assets, and rebuilding after a library change. Previously
+  all of it ran on the main actor inside the first render, so the window itself could not
+  draw until the library had finished loading. Main-actor work at launch went from about
+  800ms to about 70ms.
+- **The grid no longer stutters while a download runs.** Every library change rebuilt all
+  35,000 assets on the main actor, and a download makes the library change constantly.
+  That rebuild moved off the main actor too.
+- **Finder tags use `URLResourceValues.tagNames`** instead of hand-writing a property
+  list into the extended attribute with `setxattr`. The setter needs macOS 26, which is
+  now the deployment target. The attribute written is identical, which the self-check
+  confirms by reading it back both ways.
+- **Timings are in the log.** `loadAlbums.enumerate`, `select.fetch`,
+  `select.rebuildSections`, `change.rematerialise` and time-to-window are recorded on
+  every launch, so "it feels slow" can be answered from a bug report rather than a
+  special build.
 - **Layered app icon.** `Icon/AppIcon.icon` carries a gradient fill and a single glyph
   layer -- no container, no shadow, no specular highlight. On macOS 26 the system draws
   all three itself, and differently per appearance (default, dark, clear, tinted), so the
@@ -37,7 +54,11 @@
 - **`--shot` waited a fixed nine seconds for the window and gave up if it was not there.**
   When launch got slower than that guess it exited with code 3 and no file, which is a
   miserable thing to diagnose from a missing screenshot. It now waits for the window to
-  appear.
+  appear, and applies `--album` and `--group` once the window is up rather than on a
+  separate timer that could lose the race and capture the wrong grouping.
+- **A library change could cancel the album recount it had just scheduled.** The debounce
+  and the enumeration shared one task handle, so the reload cancelled the task it was
+  running inside.
 
 ## 1.2
 
