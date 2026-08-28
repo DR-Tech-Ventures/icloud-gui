@@ -49,3 +49,14 @@ jobs:
           case "$sdk" in
             14.*) echo "::error::SDK stamped as $sdk -- Liquid Glass will not be applied"; exit 1 ;;
           esac
+
+      # The runner has Xcode, so actool is present and the layered icon must have been
+      # compiled. build.sh skips it silently by design on a machine without Xcode, which
+      # is exactly why CI has to be the thing that notices it going missing.
+      - name: Check the layered icon was compiled in
+        run: |
+          test -f "build/iCloud GUI.app/Contents/Resources/Assets.car" || {
+            echo "::error::Assets.car missing -- the macOS 26 icon was not compiled"; exit 1; }
+          plutil -p "build/iCloud GUI.app/Contents/Info.plist" | grep -q CFBundleIconName || {
+            echo "::error::CFBundleIconName missing -- Assets.car would be ignored"; exit 1; }
+          echo "layered icon present"

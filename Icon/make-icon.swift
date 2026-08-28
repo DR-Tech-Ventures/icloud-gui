@@ -70,59 +70,54 @@ func drawIcon(size: CGFloat) -> NSBitmapImageRep {
     return rep
 }
 
-/// The two layers Icon Composer wants, for the macOS 26 layered icon format.
+/// The single glyph layer for `Icon/AppIcon.icon`, the macOS 26 layered icon format.
 ///
-/// Nothing here draws the rounded-rect container, the shadow or the specular highlight
-/// that `drawIcon` bakes in: on Tahoe the system draws all three itself, differently per
-/// appearance (default, dark, clear, tinted), and a layer that brings its own gets a
-/// second squircle inside the real one and a shadow that does not move with the light.
-/// So the background is a full-bleed square and the glyph is alone on transparency.
-func drawLayers(to directory: String) {
+/// Nothing here draws the rounded-rect container, the background, the shadow or the
+/// specular highlight that `drawIcon` bakes into the .icns. On macOS 26 the system draws
+/// all four itself and differently per appearance (default, dark, clear, tinted), so a
+/// layer that brings its own gets a second squircle inside the real one and a shadow
+/// that does not move with the light. The background is not an image at all -- it is the
+/// `automatic-gradient` fill in icon.json, which is how Apple's own icons do it.
+///
+/// ponytail: one layer holds both the cloud and the arrow, rather than a layer each.
+/// Ceiling: they get one shared shadow and specular pass instead of separate ones, and
+/// in tinted mode they flatten to a single tint -- which they would anyway. Upgrade
+/// path: emit cloud.png and arrow.png and give icon.json two entries in the group.
+func drawGlyph(to directory: String) {
     let size: CGFloat = 1024
     try? FileManager.default.createDirectory(atPath: directory,
                                              withIntermediateDirectories: true)
 
-    func render(_ body: (CGContext) -> Void) -> Data {
-        let rep = NSBitmapImageRep(bitmapDataPlanes: nil,
-                                  pixelsWide: Int(size), pixelsHigh: Int(size),
-                                  bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
-                                  isPlanar: false, colorSpaceName: .deviceRGB,
-                                  bytesPerRow: 0, bitsPerPixel: 0)!
-        rep.size = NSSize(width: size, height: size)
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-        NSGraphicsContext.current?.imageInterpolation = .high
-        if let ctx = NSGraphicsContext.current?.cgContext { body(ctx) }
-        NSGraphicsContext.restoreGraphicsState()
-        return rep.representation(using: .png, properties: [:])!
-    }
+    let rep = NSBitmapImageRep(bitmapDataPlanes: nil,
+                              pixelsWide: Int(size), pixelsHigh: Int(size),
+                              bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                              isPlanar: false, colorSpaceName: .deviceRGB,
+                              bytesPerRow: 0, bitsPerPixel: 0)!
+    rep.size = NSSize(width: size, height: size)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    NSGraphicsContext.current?.imageInterpolation = .high
 
-    let full = CGRect(x: 0, y: 0, width: size, height: size)
-
-    let background = render { _ in
-        NSGradient(colors: [tileTop, tileBottom])!.draw(in: full, angle: -90)
-    }
-    try? background.write(to: URL(fileURLWithPath: "\(directory)/background.png"))
-
-    // Sized against the same 0.82 content square drawIcon uses, so the glyph sits on
-    // the icon grid at the weight the .icns version has.
-    let foreground = render { _ in
-        let config = NSImage.SymbolConfiguration(pointSize: size * 0.82 * 0.50,
-                                                 weight: .medium)
-            .applying(NSImage.SymbolConfiguration(paletteColors: [accent, .white]))
-        guard let glyph = NSImage(systemSymbolName: "icloud.and.arrow.down",
-                                  accessibilityDescription: nil)?
-            .withSymbolConfiguration(config) else { return }
+    // Sized against the same 0.82 content square drawIcon uses, so the glyph sits on the
+    // icon grid at the weight the .icns version has.
+    let config = NSImage.SymbolConfiguration(pointSize: size * 0.82 * 0.50, weight: .medium)
+        .applying(NSImage.SymbolConfiguration(paletteColors: [accent, .white]))
+    if let glyph = NSImage(systemSymbolName: "icloud.and.arrow.down",
+                           accessibilityDescription: nil)?
+        .withSymbolConfiguration(config) {
         let w = glyph.size.width, h = glyph.size.height
         glyph.draw(in: CGRect(x: (size - w) / 2, y: (size - h) / 2, width: w, height: h))
     }
-    try? foreground.write(to: URL(fileURLWithPath: "\(directory)/foreground.png"))
+    NSGraphicsContext.restoreGraphicsState()
 
-    print("wrote background.png and foreground.png to \(directory)")
+    let out = "\(directory)/glyph.png"
+    try? rep.representation(using: .png, properties: [:])!
+        .write(to: URL(fileURLWithPath: out))
+    print("wrote \(out)")
 }
 
-if CommandLine.arguments.contains("--layers") {
-    drawLayers(to: CommandLine.arguments.count > 2 ? CommandLine.arguments[2] : "Layers")
+if CommandLine.arguments.contains("--glyph") {
+    drawGlyph(to: CommandLine.arguments.count > 2 ? CommandLine.arguments[2] : "AppIcon.icon/Assets")
     exit(0)
 }
 

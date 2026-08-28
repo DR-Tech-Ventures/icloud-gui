@@ -52,6 +52,36 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/iCloudGUI"
 cp Icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
+# The layered icon, for macOS 26's Dock and Finder. Compiling Icon/AppIcon.icon into an
+# Assets.car is what makes macOS draw the container, the shadow, the specular highlight
+# and the dark/clear/tinted variants itself, instead of using the flat bitmap in the
+# .icns -- which on Tahoe reads as an icon from two releases ago.
+#
+# Optional on purpose. actool ships inside Xcode.app and is NOT in the standalone
+# Command Line Tools, and this project's build has never needed full Xcode. Without it
+# you get the .icns on every macOS version, which is exactly what 1.2 shipped.
+ICON_NAME=""
+if ACTOOL="$(xcrun --find actool 2>/dev/null)" && [ -d "Icon/AppIcon.icon" ]; then
+    echo "==> Compiling layered icon"
+    # actool also renders its own AppIcon.icns from the .icon, but only down to 256px.
+    # Ours is drawn per size up to 1024 and stays sharp at 16px, so it is compiled to a
+    # scratch directory and only Assets.car is taken.
+    ICON_TMP="$(mktemp -d)"
+    "$ACTOOL" --compile "$ICON_TMP" --app-icon AppIcon \
+              --output-partial-info-plist "$ICON_TMP/partial.plist" \
+              --platform macosx --minimum-deployment-target "$MIN_VERSION" \
+              --include-all-app-icons "$PWD/Icon/AppIcon.icon" >/dev/null
+    if [ -f "$ICON_TMP/Assets.car" ]; then
+        cp "$ICON_TMP/Assets.car" "$APP/Contents/Resources/Assets.car"
+        # Pairs with Assets.car. macOS 26 prefers it; 14-25 ignore it and use
+        # CFBundleIconFile, so both keys are correct at once.
+        ICON_NAME="    <key>CFBundleIconName</key>          <string>AppIcon</string>"
+    fi
+    rm -rf "$ICON_TMP"
+else
+    echo "==> Layered icon skipped (needs Xcode; the .icns still ships)"
+fi
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -61,10 +91,11 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleDisplayName</key>       <string>${APP_NAME}</string>
     <key>CFBundleExecutable</key>        <string>iCloudGUI</string>
     <key>CFBundleIconFile</key>          <string>AppIcon</string>
+${ICON_NAME}
     <key>CFBundleIdentifier</key>        <string>${BUNDLE_ID}</string>
     <key>CFBundlePackageType</key>       <string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>1.2</string>
-    <key>CFBundleVersion</key>           <string>3</string>
+    <key>CFBundleShortVersionString</key><string>1.3</string>
+    <key>CFBundleVersion</key>           <string>4</string>
     <key>LSMinimumSystemVersion</key>    <string>${MIN_VERSION}</string>
     <key>NSHighResolutionCapable</key>   <true/>
     <key>NSHumanReadableCopyright</key>

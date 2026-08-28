@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.3
+
+**The app icon is now a layered macOS 26 icon, drawn by the system rather than baked
+into a bitmap.**
+
+- **Layered app icon.** `Icon/AppIcon.icon` carries a gradient fill and a single glyph
+  layer -- no container, no shadow, no specular highlight. On macOS 26 the system draws
+  all three itself, and differently per appearance (default, dark, clear, tinted), so the
+  glyph picks up real edge lighting and depth instead of the flat bitmap 1.2 shipped.
+  `build.sh` compiles it with `actool` into `Assets.car`.
+- **macOS 14-25 are unchanged.** The hand-rendered `AppIcon.icns` still ships and is
+  still what they use -- it is drawn per size from 16 to 1024, where `actool`'s generated
+  fallback stops at 256. Both `CFBundleIconFile` and `CFBundleIconName` are set, and each
+  OS picks the one it understands.
+- **Building still does not require Xcode.** `actool` ships inside `Xcode.app` and not in
+  the Command Line Tools, so the layered icon is compiled only when it is available.
+  Without it the build says so and ships the `.icns` alone. CI has Xcode and now asserts
+  the layered icon was produced, because skipping it silently is the failure worth
+  catching.
+- `Icon/Layers/` is gone, replaced by the real `Icon/AppIcon.icon` document. 1.2 shipped
+  those two PNGs as a hand-off to Icon Composer; the format turned out to be plain JSON
+  beside a PNG, so the hand-off is not needed and the icon is fully scripted.
+
 ## 1.2
 
 **The interface has been rebuilt around the window toolbar, and the app now adopts the

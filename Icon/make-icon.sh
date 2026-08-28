@@ -8,9 +8,9 @@ swiftc -O make-icon.swift -o "$TMP/make-icon"
 iconutil -c icns "$TMP/AppIcon.iconset" -o AppIcon.icns
 echo "==> Icon/AppIcon.icns  ($(du -h AppIcon.icns | cut -f1))"
 
-# Source layers for the macOS 26 layered icon format. Icon Composer has no command
-# line, so turning these into AppIcon.icon is a manual step -- see CONTRIBUTING.md.
-# The .icns above stays the shipped icon until that file exists, and remains the icon
-# macOS 14-25 uses either way.
-"$TMP/make-icon" --layers Layers
-echo "==> Icon/Layers/  (drag into Icon Composer)"
+# The glyph layer for Icon/AppIcon.icon, the macOS 26 layered icon format. icon.json
+# beside it is hand-written and committed -- it is small, and it is the one part of the
+# icon a person might want to tweak (the gradient colour) without running anything.
+# build.sh compiles the pair with actool, when Xcode is installed.
+"$TMP/make-icon" --glyph AppIcon.icon/Assets
+echo "==> Icon/AppIcon.icon  (open in Icon Composer to edit visually)"

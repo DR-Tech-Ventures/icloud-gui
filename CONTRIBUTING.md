@@ -213,21 +213,48 @@ a bug report can attach one. See SECURITY.md.
 
 ## The app icon
 
-`Icon/AppIcon.icns` is generated, not hand-drawn — `Icon/make-icon.swift` draws it and
-`./Icon/make-icon.sh` regenerates the `.icns`. Committing the source rather than only a
-binary means the design can actually be edited.
+Two icons ship, from one design, and neither is hand-drawn.
 
-`make-icon.sh` also writes `Icon/Layers/` — `background.png` and `foreground.png` at
-1024px, the two layers the macOS 26 layered icon format wants. Neither carries the
-rounded-rect container, the shadow or the specular highlight that the `.icns` bakes in,
-because on macOS 26 the system draws those itself and differently per appearance
-(default, dark, clear, tinted).
+| File | Used by | Made by |
+|---|---|---|
+| `Icon/AppIcon.icns` | macOS 14-25 | `Icon/make-icon.swift`, rendered per size 16 to 1024 |
+| `Icon/AppIcon.icon` | macOS 26+ | `icon.json` (committed) plus a glyph PNG from the same script |
 
-Turning those layers into `AppIcon.icon` is a **manual step**: Icon Composer (bundled
-with Xcode, at *Xcode ▸ Open Developer Tool ▸ Icon Composer*) has no command-line
-interface and the `icon.json` format is undocumented, so it is not scriptable. Drag both
-layers in, export `AppIcon.icon`, and add it to the bundle alongside the `.icns` — which
-stays regardless, as it is still the icon macOS 14–25 uses.
+`./Icon/make-icon.sh` regenerates both. `build.sh` compiles the `.icon` with `actool`
+into `Assets.car` and adds `CFBundleIconName`; the `.icns` is copied in alongside it with
+`CFBundleIconFile`. macOS 26 prefers the first, older versions ignore it and use the
+second, so both keys are correct at once.
+
+**The layered icon is optional at build time.** `actool` lives inside `Xcode.app` and is
+*not* in the standalone Command Line Tools, which this project has otherwise never
+needed. Without Xcode the build prints `Layered icon skipped` and ships only the `.icns`
+-- the app is fine, it just gets the flat icon on Tahoe. CI has Xcode and asserts the
+layered icon was produced, because a silent skip is the failure mode worth catching.
+
+### Why the layers carry no container
+
+`icon.json` is an `automatic-gradient` fill and one layer holding the glyph. There is no
+background image, no rounded rectangle, no shadow and no specular highlight, because on
+macOS 26 the system draws all four itself and differently per appearance -- default,
+dark, clear and tinted. A layer that brings its own gets a second squircle inside the
+real one and a shadow that does not move with the light.
+
+The `.icns` bakes all of it in, because macOS 14-25 draw none of it.
+
+### Editing it
+
+The gradient colour is one line in `Icon/AppIcon.icon/icon.json`. The glyph comes from
+`drawGlyph` in `make-icon.swift`. `AppIcon.icon` is a real Icon Composer document, so
+*Xcode > Open Developer Tool > Icon Composer* opens it for visual editing -- but nothing
+in the pipeline needs that app, and the format is plain JSON beside a PNG.
+
+Do not judge the result from the glyph PNG alone; it is only the middle of the picture.
+Ask macOS what it actually draws, which is what Finder and the Dock show, container and
+lighting included:
+
+```swift
+NSWorkspace.shared.icon(forFile: "build/iCloud GUI.app")
+```
 
 ## Releasing
 
