@@ -23,9 +23,21 @@ Worth knowing when judging whether something is a security issue. The app:
 - **Never asks for, receives, stores, or transmits your Apple ID password.** There is no
   login in this app. Authentication is entirely macOS's, and no credential ever passes
   through this code.
-- **Makes no network requests of its own.** All iCloud traffic is PhotoKit's, inside
-  Apple's frameworks.
-- Has **no analytics, telemetry, or third-party dependencies.**
+- **Makes exactly one network request of its own, and only when you ask for it.**
+  Choosing **iCloud GUI ▸ Check for Updates…** fetches the latest release tag from
+  `api.github.com` and compares it with the running version. Nothing about you or your
+  library is sent, nothing is downloaded or installed, and the request is never made on
+  a timer or at launch. Never using that menu item means the app makes no requests of
+  its own at all. All other iCloud traffic is PhotoKit's, inside Apple's frameworks.
+- Has **no analytics, telemetry, crash reporting, or third-party dependencies.** There
+  is deliberately no Sentry-style reporter: crash payloads from this app would carry file
+  paths, which here means album names, photo filenames and your home directory. macOS
+  already writes native crash reports locally, to `~/Library/Logs/DiagnosticReports/`,
+  and you choose whether to attach one to a bug report.
+- Writes **lifecycle breadcrumbs to the macOS unified log** (launch, authorisation
+  result, album counts, termination). That log is local to your Mac and is never sent
+  anywhere; interpolated values are redacted unless explicitly marked public, and none of
+  the public ones carry paths or album names.
 
 Given that, the security surface worth reporting is roughly:
 

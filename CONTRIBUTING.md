@@ -131,7 +131,8 @@ There are diagnostic flags for the parts that need a real library. They print to
 | `--hidden` | Why the Hidden album is empty. |
 | `--extras` | Burst frames, UUID filenames, favourites, locations. |
 | `--size` | Estimated size of a full backup. |
-| `--shot 1000x700` | Renders the window to `/tmp/icg-shot.png`. Needs no Screen Recording permission. |
+| `--updates` | The update check, without the menu item: the request, GitHub's response shape and the version comparison. |
+| `--shot 1000x700` | Captures the window to `/tmp/icg-shot.png`. Needs no Screen Recording permission. |
 | `--demo` | Generic album names and generated tiles, for screenshots. |
 | `--album <name>` | Select an album before capturing. |
 | `--group day\|month\|year` | Set the grid grouping before capturing. |
@@ -142,8 +143,17 @@ people give to their children, relatives and holidays. Demo mode substitutes bot
 leaving the interface, layout and live scan output real.
 
 ```bash
-open "build/iCloud GUI.app" --args --demo --shot 1200x760 --album "All Photos" --group month
+open "build/iCloud GUI.app" --args --demo --shot 1280x840 --album "All Photos" --group month
 ```
+
+`--shot` goes through `CGWindowListCreateImage` on the app's own window, which needs no
+Screen Recording grant. It cannot fall back to rendering the layer tree and stay
+correct: Liquid Glass draws the sidebar, the toolbar and every control bezel in backdrop
+layers that sit outside the view hierarchy, so a layer render captures them as blank
+white. That fallback is still in `Shot.swift` for a machine old enough not to have glass.
+
+Keep captures at or above the 1180pt minimum window width — narrower and macOS folds the
+toolbar's trailing items, Download included, behind a `»` overflow menu.
 
 Run them like this:
 
@@ -171,11 +181,53 @@ These were each found the hard way. The comments in the code say so too.
 - **Hidden and Recently Deleted are macOS restrictions**, not missing features. Neither
   is reachable by any third-party app. Both are listed in the sidebar deliberately.
 
+## Where the logs are
+
+Three places, none of which is a file the app invents:
+
+| What | Where | Covers |
+|---|---|---|
+| Lifecycle breadcrumbs | macOS unified log, subsystem `com.drtechventures.icloudgui` | Launch, Photos authorisation, album loads, clean termination |
+| Crash reports | `~/Library/Logs/DiagnosticReports/` | Actual crashes, symbolicated, written by macOS |
+| Download failures | `.icloudgui-log.txt` in the destination folder | Per-run start/failure/end, written unbuffered |
+
+```bash
+log show --predicate 'subsystem == "com.drtechventures.icloudgui"' --last 1h --style compact
+```
+
+The useful trick is the absence of a line: every launch logs `launched`, and every
+orderly quit logs `terminating normally`. A `launched` with no matching terminate means
+the process was killed — by the system, by `pkill`, or by a rebuild deleting its bundle.
+No crash report is written in that case, which is why "no crash report" does not mean
+"did not stop".
+
+`Log.swift` uses `os.Logger`, so interpolated values are redacted as `<private>` unless
+explicitly marked `.public`. Keep paths, album names and filenames out of the public
+ones — this log is readable by anything on the machine that asks for it.
+
+**There is deliberately no crash-reporting service.** Sentry and its kind would mean a
+third-party dependency, a network connection the app otherwise does not make, and crash
+payloads carrying file paths — which for this app means album names, photo filenames and
+the user's home directory. macOS already writes better native crash reports locally, and
+a bug report can attach one. See SECURITY.md.
+
 ## The app icon
 
 `Icon/AppIcon.icns` is generated, not hand-drawn — `Icon/make-icon.swift` draws it and
 `./Icon/make-icon.sh` regenerates the `.icns`. Committing the source rather than only a
 binary means the design can actually be edited.
+
+`make-icon.sh` also writes `Icon/Layers/` — `background.png` and `foreground.png` at
+1024px, the two layers the macOS 26 layered icon format wants. Neither carries the
+rounded-rect container, the shadow or the specular highlight that the `.icns` bakes in,
+because on macOS 26 the system draws those itself and differently per appearance
+(default, dark, clear, tinted).
+
+Turning those layers into `AppIcon.icon` is a **manual step**: Icon Composer (bundled
+with Xcode, at *Xcode ▸ Open Developer Tool ▸ Icon Composer*) has no command-line
+interface and the `icon.json` format is undocumented, so it is not scriptable. Drag both
+layers in, export `AppIcon.icon`, and add it to the bundle alongside the `.icns` — which
+stays regardless, as it is still the icon macOS 14–25 uses.
 
 ## Releasing
 

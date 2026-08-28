@@ -44,7 +44,7 @@ On first launch the app opens a guide covering how it works, the four download s
 every option, and the limits macOS imposes — including **step-by-step instructions for
 unlocking Hidden photos and recovering deleted ones**. It is **not** a one-shot splash screen —
 reopen it any time from **Help → iCloud GUI Guide** (⌘?) or the **?** button in the
-bottom bar.
+toolbar.
 
 To see the first-run version again:
 
@@ -65,6 +65,17 @@ cd icloud-gui
 ./run.sh
 ```
 
+**Check for updates** from the **iCloud GUI ▸ Check for Updates…** menu. It asks GitHub
+for the latest release tag and offers to open the release page — only when you click it,
+never on a timer, and it sends nothing about you or your library. It is the only network
+request the app makes on its own behalf; see [SECURITY.md](SECURITY.md).
+
+**Or download a release.** Releases ship as a signed, notarised disk image — open it and
+drag **iCloud GUI** onto the **Applications** shortcut inside. Keeping it in
+`/Applications` rather than running it out of `~/Downloads` matters here: macOS ties the
+Photos permission to where the app lives and how it is signed, so an app that moves
+around gets asked for access again.
+
 Released builds are signed and notarised by Apple, and cut by hand rather than by CI so
 the signing key never leaves the maintainer's Mac.
 Anything else would mean asking you to bypass Gatekeeper on an app that reads your
@@ -72,7 +83,7 @@ entire photo library — see [RELEASING.md](RELEASING.md) for why that is not of
 
 ## Requirements
 
-- macOS 14+
+- macOS 14+ (on macOS 26 and later the app picks up the Liquid Glass design)
 - Photos app signed into iCloud with **iCloud Photos** turned on
   (System Settings › [your name] › iCloud › Photos)
 - Xcode command line tools (for building)
@@ -173,7 +184,7 @@ Files land as `Destination/YYYY/YYYY-MM-DD/IMG_1234.HEIC`.
 
 ## Folder layout
 
-Two options, switchable in the bottom bar:
+Two options, both in the **File Options** menu in the toolbar:
 
 | Option | Result |
 |---|---|
@@ -222,7 +233,7 @@ To download hidden photos:
 
 1. Open **Photos** → **Settings** (⌘,) → **General**
 2. Turn off **"Use Touch ID or Password"**
-3. Back in iCloud GUI, click the rescan button
+3. Back in iCloud GUI, pick **Reload Library and Rescan** from the destination menu
 
 The Hidden row is always listed, showing **—** rather than a count, and clicking it
 explains the setting instead of showing a bare "empty album".
@@ -336,8 +347,9 @@ file and the toggle changes nothing — it never writes a pointless duplicate.
 ## Only downloading what's new
 
 Pick a destination and the app scans it, then tells you what's actually missing —
-*before* you download: **"1,247 new · 34,567 already downloaded"**. **Only new** is on
-by default, so the Download button reads `Download 1,247 New` and fetches just those.
+*before* you download: **"1,247 new · 34,567 already downloaded"**. **Only download what
+is missing** (in File Options) is on by default, so the Download button reads
+`Download 1,247 New` and fetches just those.
 
 ### How it decides, and why there's an index file
 
@@ -384,8 +396,8 @@ dropped. The status line notes how many arrived since you opened the window.
 Album counts are recounted too, debounced by two seconds so an import firing a burst of
 changes does not recount sixty albums each time.
 
-The refresh button beside the destination forces a full reload of both the library and
-the destination scan.
+**Reload Library and Rescan**, in the toolbar's destination menu, forces a full reload
+of both the library and the destination scan.
 
 ### Downloading new photos automatically
 
@@ -419,8 +431,8 @@ below 25 GB**. That figure is macOS's "available for important usage", which cou
 purgeable caches, so it reads higher than `df`. Treat it as an optimistic ceiling.
 
 If the total does not fit, point the destination at your NAS rather than the home folder.
-Running out mid-run is not destructive — completed files stay valid and **Only new**
-picks up exactly where it stopped — but it wastes hours.
+Running out mid-run is not destructive — completed files stay valid and **Only download
+what is missing** picks up exactly where it stopped — but it wastes hours.
 
 ## The Mac stays awake while downloading
 

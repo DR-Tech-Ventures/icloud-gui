@@ -37,6 +37,19 @@ struct AssetSection: Identifiable {
     let assets: [PHAsset]
 }
 
+/// Narrows the sidebar to albums matching `query`, dropping sections that end up empty
+/// so a search does not leave a column of bare headings. An empty or whitespace-only
+/// query is not a filter -- it returns everything rather than nothing.
+func filterAlbums(_ groups: [AlbumGroup], matching query: String) -> [AlbumGroup] {
+    let needle = query.trimmingCharacters(in: .whitespaces)
+    guard !needle.isEmpty else { return groups }
+    return groups.compactMap { group in
+        let matches = group.albums.filter { $0.title.localizedCaseInsensitiveContains(needle) }
+        return matches.isEmpty ? nil
+            : AlbumGroup(id: group.id, title: group.title, albums: matches)
+    }
+}
+
 @MainActor
 final class PhotoStore: NSObject, ObservableObject {
     @Published var status: PHAuthorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
@@ -49,6 +62,14 @@ final class PhotoStore: NSObject, ObservableObject {
     @Published private(set) var sections: [AssetSection] = []
     /// Every frame, including burst siblings the grid does not show.
     @Published private(set) var downloadableAssets: [PHAsset] = []
+
+    /// Sidebar search text. Filters the album list only -- it does not touch the grid,
+    /// because PhotoKit has no text index over assets and scanning 35,000 filenames per
+    /// keystroke would be worse than not offering it.
+    @Published var albumFilter = ""
+
+    /// `albumGroups` narrowed by `albumFilter`.
+    var visibleGroups: [AlbumGroup] { filterAlbums(albumGroups, matching: albumFilter) }
 
     @Published var grouping: DateGrouping = .day { didSet { rebuildSections() } }
     @Published var newestFirst = true { didSet { rebuildSections() } }
@@ -82,6 +103,10 @@ final class PhotoStore: NSObject, ObservableObject {
 
     func requestAccess() async {
         status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        // Bound to a local because os_log's interpolation is an autoclosure, and
+        // referring to a property inside one needs an explicit self.
+        let granted = status.rawValue
+        Log.library.notice("photos authorisation: \(granted, privacy: .public)")
         guard isAuthorized else { return }
         startObserving()
         loadAlbums()
@@ -230,6 +255,8 @@ final class PhotoStore: NSObject, ObservableObject {
 
         albumGroups = groups
         albums = groups.flatMap(\.albums)
+        let (albumCount, groupCount) = (albums.count, groups.count)
+        Log.library.notice("loaded \(albumCount, privacy: .public) albums in \(groupCount, privacy: .public) groups")
         if selectedAlbum == nil { select(albums.first) }
     }
 

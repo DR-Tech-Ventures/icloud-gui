@@ -111,20 +111,30 @@ BUNDLE_ID=com.yourdomain.icloudgui ./release.sh
 ```
 
 That builds, signs with hardened runtime, submits to Apple, waits for the result,
-staples the ticket into the `.app`, verifies with `spctl`, and produces a zip ready to
-attach to a GitHub Release.
+staples the ticket into the `.app`, verifies with `spctl`, packages the stapled app into
+a disk image alongside an `/Applications` symlink, then signs, notarises and staples the
+disk image too.
+
+**That is two round trips to Apple, not one** — a few minutes each. The app and the disk
+image are separate artifacts with separate signatures, and a notarised app inside an
+un-notarised container still makes Gatekeeper check online at first launch, which fails
+on a machine that happens to be offline.
 
 ### Step 6 — publish it
 
-`release.sh` leaves the distributable at **`build/iCloud-GUI.zip`**. Attach it to a
+`release.sh` leaves the distributable at **`build/iCloud-GUI.dmg`**. Attach it to a
 GitHub Release:
 
 ```bash
-gh release create v1.0 "build/iCloud-GUI.zip" \
+gh release create v1.2 "build/iCloud-GUI.dmg" \
    --repo DR-Tech-Ventures/icloud-gui \
-   --title "iCloud GUI 1.0" \
+   --title "iCloud GUI 1.2" \
    --notes "Download your iCloud photos to a Mac or NAS. Signed and notarised by Apple, so it opens without any Gatekeeper warnings."
 ```
+
+Keep the tag matching `CFBundleShortVersionString` in `build.sh` — `release.sh` refuses
+to build a version that is already tagged, and that check is what stops two different
+builds going out under one version number.
 
 `build/` is gitignored — release binaries are attached to the release, never committed.
 

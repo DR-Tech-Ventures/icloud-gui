@@ -104,7 +104,7 @@ struct GuideSheet: View {
             GuideChapter(title: "How it works", items: [
                 GuideItem(symbol: "lock.open",
                           title: "Your Apple ID password is never used",
-                          body: "There is no login here. macOS is already signed into iCloud, so the app asks the system for access to your Photos library and reads it through Apple's own framework. Nothing is typed, stored, or sent anywhere."),
+                          body: "There is no login here. macOS is already signed into iCloud, so the app asks the system for access to your Photos library and reads it through Apple's own framework. Nothing is typed, stored, or sent anywhere.\n\nThe app makes no network connections of its own, with one exception you control: Check for Updates in the iCloud GUI menu asks GitHub for the latest version number. It runs only when you click it, and sends nothing about you or your library."),
                 GuideItem(symbol: "checkmark.shield",
                           title: "Advanced Data Protection can stay on",
                           body: "Two-factor authentication is a non-issue too. Tools that use the unofficial iCloud web API require you to disable Advanced Data Protection; this one does not."),
@@ -121,10 +121,10 @@ struct GuideSheet: View {
                           body: "Click thumbnails to select. Each date header has a Select button to take that whole day, month, or year. Selecting nothing downloads the entire album — the text beside the buttons always says what is in scope."),
                 GuideItem(symbol: "folder",
                           title: "3 · Set a destination",
-                          body: "Any local folder, or a mounted NAS share. It is remembered between launches."),
+                          body: "The folder menu in the toolbar. Any local folder, or a mounted NAS share — it is remembered between launches, and the same menu reveals it in Finder or rescans it."),
                 GuideItem(symbol: "externaldrive.badge.questionmark",
                           title: "Check you have room first",
-                          body: "A full library is bigger than most people expect — a real 35,000-item library measured around 204 GB, averaging 5.8 MB per item. Free space on the destination is shown next to the folder, and turns orange below 25 GB. If it will not fit, point at a NAS instead of your home folder.\n\nRunning out mid-way is not destructive: finished files stay valid and Only new resumes exactly where it stopped."),
+                          body: "A full library is bigger than most people expect — a real 35,000-item library measured around 204 GB, averaging 5.8 MB per item. Free space on the destination is shown in the bar under the grid, and turns orange below 25 GB. If it will not fit, point at a NAS instead of your home folder.\n\nRunning out mid-way is not destructive: finished files stay valid and \"Only download what is missing\" resumes exactly where it stopped."),
                 GuideItem(symbol: "moon.zzz",
                           title: "Your Mac stays awake while downloading",
                           body: "A large backup runs for hours, so the app prevents idle sleep until it finishes. Closing the lid still sleeps the machine — no app can override that — so leave it open for an overnight run."),
@@ -135,13 +135,13 @@ struct GuideSheet: View {
             GuideChapter(title: "Options", items: [
                 GuideItem(symbol: "antenna.radiowaves.left.and.right",
                           title: "The library updates itself",
-                          body: "You do not need to reopen the app when new photos arrive. The grid follows your library live — take a photo on your phone and it appears here once iCloud syncs it, with your selection left intact. The status line notes how many arrived since you opened the window.\n\nThe refresh button next to the destination folder forces a full reload if you want one."),
+                          body: "You do not need to reopen the app when new photos arrive. The grid follows your library live — take a photo on your phone and it appears here once iCloud syncs it, with your selection left intact. The status line notes how many arrived since you opened the window.\n\nReload Library and Rescan, in the toolbar's destination menu, forces a full reload if you want one."),
                 GuideItem(symbol: "arrow.trianglehead.2.clockwise",
                           title: "Download new photos automatically",
                           body: "Off by default. Turn it on and every photo that arrives is fetched as soon as it appears, with no clicking.\n\nTurn it on only after a full backup has finished. Doing it beforehand means the first change triggers a download of everything still missing, which can be hundreds of gigabytes."),
                 GuideItem(symbol: "sparkles",
-                          title: "Only new",
-                          body: "On by default. The app scans your destination and tells you what is actually missing before you start — \"1,247 new · 34,567 already downloaded\". Re-run it any time as an incremental backup; nothing is fetched twice."),
+                          title: "Only download what is missing",
+                          body: "On by default. The app scans your destination and tells you what is actually missing before you start — \"1,247 new · 34,567 already downloaded\". The Download button then reads \"Download 1,247 New\". Re-run it any time as an incremental backup; nothing is fetched twice."),
                 GuideItem(symbol: "calendar",
                           title: "Date folders or one folder",
                           body: "Save as 2024/2024-03-15/IMG_1234.HEIC, or drop everything straight into the destination. Switching affects new downloads only — files already saved stay where they are."),
@@ -168,7 +168,7 @@ struct GuideSheet: View {
                           1.  Open Photos
                           2.  Settings (⌘,) → General
                           3.  Turn off “Use Touch ID or Password”
-                          4.  Come back here and click the rescan button next to your destination folder
+                          4.  Come back here and pick Reload Library and Rescan from the destination menu
                           """,
                           tone: .caution),
                 GuideItem(symbol: "trash.slash",
@@ -180,7 +180,7 @@ struct GuideSheet: View {
                           1.  Open Photos
                           2.  Go to Recently Deleted in the sidebar
                           3.  Select the photos you want and click Recover
-                          4.  Come back here and click rescan — they are in your library again
+                          4.  Come back here and rescan — they are in your library again
                           """,
                           tone: .caution),
                 GuideItem(symbol: "person.2",

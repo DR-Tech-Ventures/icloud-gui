@@ -3,14 +3,15 @@ import SwiftUI
 
 struct PhotoGrid: View {
     @ObservedObject var store: PhotoStore
-    @State private var thumbSize: CGFloat = 132
+    @Binding var thumbSize: Double
 
     private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: thumbSize, maximum: thumbSize * 1.5), spacing: 6)]
+        [GridItem(.adaptive(minimum: CGFloat(thumbSize),
+                            maximum: CGFloat(thumbSize) * 1.5), spacing: 6)]
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        Group {
             if store.assets.isEmpty {
                 switch store.selectedAlbum?.notice {
                 case .hiddenLocked:
@@ -20,7 +21,7 @@ struct PhotoGrid: View {
                     ContentUnavailableView {
                         Label("Hidden photos are locked", systemImage: "lock")
                     } description: {
-                        Text("macOS does not release hidden photos to any other app while the Hidden album is protected — even with full Photos access.\n\nIn Photos, open Settings (⌘,) → General and turn off “Use Touch ID or Password”, then click the rescan button here.")
+                        Text("macOS does not release hidden photos to any other app while the Hidden album is protected — even with full Photos access.\n\nIn Photos, open Settings (⌘,) → General and turn off “Use Touch ID or Password”, then pick Reload Library and Rescan from the destination menu in the toolbar.")
                             .frame(maxWidth: 460)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -47,7 +48,7 @@ struct PhotoGrid: View {
                                 LazyVGrid(columns: columns, spacing: 6) {
                                     ForEach(section.assets, id: \.localIdentifier) { asset in
                                         Thumbnail(asset: asset,
-                                                  size: thumbSize,
+                                                  size: CGFloat(thumbSize),
                                                   isSelected: store.selection.contains(asset.localIdentifier),
                                                   store: store)
                                             .onTapGesture { store.toggle(asset) }
@@ -67,41 +68,9 @@ struct PhotoGrid: View {
                     }
                 }
             }
-            Divider()
-            toolbar
         }
     }
 
-    private var toolbar: some View {
-        HStack(spacing: 10) {
-            Picker("", selection: $store.grouping) {
-                ForEach(DateGrouping.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 170)
-            .help("Group the grid by day, month, or year")
-
-            Button {
-                store.newestFirst.toggle()
-            } label: {
-                Label(store.newestFirst ? "Newest first" : "Oldest first",
-                      systemImage: store.newestFirst ? "arrow.down" : "arrow.up")
-            }
-            .buttonStyle(.borderless)
-            .help("Flip the sort order")
-
-            Spacer()
-
-            Text("\(store.sections.count) group\(store.sections.count == 1 ? "" : "s")")
-                .font(.caption).foregroundStyle(.secondary)
-
-            Image(systemName: "photo").font(.caption2).foregroundStyle(.secondary)
-            Slider(value: $thumbSize, in: 84...220).frame(width: 110)
-            Image(systemName: "photo.fill").foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 14).padding(.vertical, 7)
-    }
 }
 
 private struct SectionHeader: View {

@@ -10,7 +10,14 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    # Pinned rather than macos-latest, so a runner image rolling forward cannot break a
+    # build on its own schedule. macOS 26 is the first image whose SDK produces the
+    # Liquid Glass appearance, so this is the image that matches what releases ship.
+    #
+    # Nothing in Sources/ needs it to compile -- the code deliberately calls no
+    # macOS 26-only API, so it still builds on macos-15 and on a contributor's older
+    # Mac. See the toolbar comment in ContentView.swift.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
@@ -29,3 +36,16 @@ jobs:
 
       - name: Assemble app bundle
         run: ./build.sh release
+
+      # The whole point of build.sh's -platform_version flag. If SwiftPM ever starts
+      # stamping the SDK version itself, or the flag stops being accepted, the app
+      # silently reverts to the pre-Tahoe appearance -- silently is the problem, so
+      # assert it here rather than discovering it in a screenshot.
+      - name: Check the binary records the real SDK version
+        run: |
+          sdk=$(otool -l "build/iCloud GUI.app/Contents/MacOS/iCloudGUI" \
+                | awk '/LC_BUILD_VERSION/{f=1} f&&/^ *sdk /{print $2; exit}')
+          echo "recorded SDK version: $sdk"
+          case "$sdk" in
+            14.*) echo "::error::SDK stamped as $sdk -- Liquid Glass will not be applied"; exit 1 ;;
+          esac

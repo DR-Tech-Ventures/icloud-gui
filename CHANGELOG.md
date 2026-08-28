@@ -1,5 +1,59 @@
 # Changelog
 
+## 1.2
+
+**The interface has been rebuilt around the window toolbar, and the app now adopts the
+Liquid Glass design on macOS 26 and later.**
+
+- **Liquid Glass.** The app was compiling against the current SDK but telling macOS it
+  was not: SwiftPM stamps the binary's recorded SDK version from the deployment target,
+  so the linked-on-or-after check that gates the new design saw 14.0 and served the old
+  appearance. The build now stamps the real SDK version while the deployment target
+  stays at macOS 14, so nothing is dropped — macOS 14 through 25 look exactly as before.
+- **Controls moved into the toolbar.** The title bar was empty while four rows of
+  controls were stacked under the grid. Grouping, sort order, thumbnail size, the
+  destination, File Options and Download are now in the window toolbar, and what is left
+  below the grid is a single status line.
+- **The window has a title again** — the selected album and its item count, so the app
+  names itself properly in Mission Control and the Window menu.
+- **Filter the sidebar.** A search field above the album list, which matters once a
+  library has more albums than fit on screen.
+- **One destination menu** replaces the separate Destination button, path button and
+  rescan button: choose the folder, reveal it in Finder, or reload and rescan.
+- **Only new** is now **Only download what is missing**, in File Options. The Download
+  button already said `Download 1,247 New` when it was on, so the separate checkbox was
+  repeating it.
+- **Check for Updates…**, in the iCloud GUI menu. It asks GitHub for the latest release
+  tag and offers to open the release page. Deliberately manual: a background updater
+  would tell a server this Mac is running the app every few hours, which would make the
+  app's own privacy claim untrue. It does not install anything either — replacing a
+  running bundle changes the code signature macOS ties the Photos grant to.
+- **Releases ship as a disk image** instead of a zip, with an `/Applications` shortcut
+  to drag onto. Running the app out of `~/Downloads` is how people end up re-granting
+  Photos access every time it moves.
+- **The window opens wide enough to use.** It now opens at 1280×840 and will not go
+  below 1180 wide — narrower than that and macOS folded the toolbar's trailing items,
+  Download included, into a "»" overflow menu.
+- Thumbnail size is remembered between launches, and its slider moved to the bar under
+  the grid where there is room for it.
+- Item counts in the status line are written with thousands separators, matching the
+  sidebar and the counts the guide quotes.
+
+**Fixes**
+
+- **`./run.sh` could silently run the previous build.** `build.sh` deletes the app bundle
+  before reassembling it, but a running instance survives that — macOS keeps the inode
+  alive while the process holds it — and `open` then *activates that stale process*
+  rather than launching what was just built. Same pid, old binary, old arguments, running
+  against a bundle whose resources no longer exist, which is why it would later vanish
+  with no crash report. `build.sh` now quits an instance running from its own bundle
+  first, targeted by path so a copy in `/Applications` is left alone.
+- **Lifecycle breadcrumbs in the macOS unified log** (`log show --predicate 'subsystem ==
+  "com.drtechventures.icloudgui"'`). Launch, Photos authorisation, album loads, and
+  orderly termination. A `launched` line with no `terminating normally` after it is how
+  you tell "killed" from "quit" — a distinction no crash report can make, because being
+  killed is not a crash.
+
 ## 1.1
 
 **A record of every run is now kept at the destination.**
