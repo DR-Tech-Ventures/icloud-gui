@@ -156,17 +156,31 @@ this short of asking every user to strip the quarantine attribute by hand — se
   Resource Access entitlement for the photo library. It is harmless if redundant. If the
   prompt fails to appear, this is the first thing to try toggling.
 
-### Automating it in GitHub Actions
+### Why releases are not automated
 
-You need two repository secrets:
+**They are cut by hand, from a Mac. This is deliberate.**
 
-- The certificate and key as a base64 `.p12`
-  (`base64 -i cert.p12 | pbcopy`), plus its export password
-- The app-specific password, apple-id and team-id
+CI builds every push, pull request and tag, and runs the assertions — but it never
+signs or notarises. The artifact it produces is ad-hoc signed and thrown away, because
+the runner has no Developer ID identity.
 
-The workflow imports the `.p12` into a temporary keychain, then runs the same
-`codesign` / `notarytool` / `stapler` sequence with `--password` instead of
-`--keychain-profile`. Keep it on a tag trigger so it only runs for releases.
+Automating the release would mean putting three secrets in GitHub, one of which is the
+**Developer ID certificate and its private key**. That is the key that signs software as
+DR Tech Ventures. A copy of it in repository secrets is readable by anyone with admin on
+the org, and if it leaks an attacker can sign software macOS will trust as us —
+revoking it invalidates our ability to sign until a replacement is issued, and Apple
+caps how many a team may hold.
+
+For an occasional release by one maintainer, `./release.sh` already does the whole
+sequence in a single command in a few minutes. The automation would buy convenience we
+do not need in exchange for copying the signing identity somewhere it does not have to
+be.
+
+**Revisit this if** someone else needs to cut releases, or releases become frequent
+enough that the manual step is real friction. The workflow would import a base64 `.p12`
+into a temporary keychain and run the same `codesign` / `notarytool` / `stapler`
+sequence with `--password` in place of `--keychain-profile`, triggered on tags, ideally
+behind a `release` environment requiring manual approval.
 
 ## Option 3 — unsigned release (not recommended)
 
