@@ -1,9 +1,15 @@
 import AppKit
 import Foundation
+import ScreenCaptureKit
 
-/// Debug: render our own window to a PNG. Needs no Screen Recording permission,
-/// because an app may always draw its own views.
-/// Usage:  open "build/iCloud GUI.app" --args --shot 960x640
+/// Debug: capture our own window to a PNG.
+///
+/// Needs the Screen Recording permission, granted once to whoever regenerates the
+/// documentation screenshots. Without it the capture falls back to rendering the layer
+/// tree, which cannot see Liquid Glass surfaces -- the sidebar and toolbar come out
+/// blank -- and says so on stderr rather than quietly writing a broken image.
+///
+/// Usage:  open "build/iCloud GUI.app" --args --shot 1280x840
 extension Notification.Name {
     static let selectAlbumForShot = Notification.Name("com.local.icloudgui.selectAlbumForShot")
     static let setGroupingForShot = Notification.Name("com.local.icloudgui.setGroupingForShot")
@@ -22,23 +28,34 @@ enum Shot {
         let grouping: String? = args.firstIndex(of: "--group").flatMap {
             $0 + 1 < args.count ? args[$0 + 1] : nil
         }
-        if wanted != nil || grouping != nil {
+        // Without --shot there is no capture to synchronise with, so these still go out
+        // on a timer. With --shot they are applied below instead, once the window is
+        // actually up -- a fixed timer and a capture that no longer waits a fixed time
+        // are a race, and the losing side is a screenshot showing the wrong grouping.
+        if (wanted != nil || grouping != nil) && !args.contains("--shot") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
-                if let wanted {
-                    NotificationCenter.default.post(name: .selectAlbumForShot, object: wanted)
-                }
-                if let grouping {
-                    NotificationCenter.default.post(name: .setGroupingForShot, object: grouping)
-                }
+                apply(album: wanted, grouping: grouping)
             }
         }
 
         guard let i = args.firstIndex(of: "--shot") else { return }
         let size = i + 1 < args.count ? parse(args[i + 1]) : nil
         let out = URL(fileURLWithPath: "/tmp/icg-shot.png")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 9) {
+
+        Task { @MainActor in
+            // Wait for the window rather than sleeping a fixed nine seconds and hoping.
+            // The old fixed delay silently produced exit(3) -- "no visible window" --
+            // whenever launch got slower than the guess, which is a miserable thing to
+            // debug from a missing file.
+            guard let main = await firstVisibleWindow(within: .seconds(40)) else {
+                FileHandle.standardError.write(
+                    "no visible window appeared within 40s\n".data(using: .utf8)!)
+                exit(3)
+            }
+            // Applied here, not on a timer: the window exists, so the selection lands
+            // before the settle below rather than racing the capture.
+            apply(album: wanted, grouping: grouping)
             if args.contains("--about") { About.show() }
-            guard let main = NSApp.windows.first(where: { $0.isVisible }) else { exit(3) }
             // A sheet is a child window; the About panel is a separate key window.
             let window = main.attachedSheet
                 ?? (args.contains("--about") ? (NSApp.keyWindow ?? main) : main)
@@ -46,20 +63,40 @@ enum Shot {
                 window.setContentSize(size)
                 window.displayIfNeeded()
             }
-            // Let the resize settle before capturing.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-                // A window capture records the window as it is drawn, so an app that
-                // lost focus to the launching terminal is captured with dimmed chrome.
-                // Done here rather than before the delay, because the terminal takes
-                // focus back in the meantime.
-                NSApp.activate(ignoringOtherApps: true)
-                window.makeKeyAndOrderFront(nil)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    capture(window, to: out)
-                    exit(0)
-                }
-            }
+            // Let the resize, the album selection and the first thumbnails settle.
+            try? await Task.sleep(for: .seconds(4))
+            // A window capture records the window as it is drawn, so an app that lost
+            // focus to the launching terminal is captured with dimmed chrome. Done here
+            // rather than earlier, because the terminal takes focus back in the meantime.
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+            try? await Task.sleep(for: .seconds(1))
+            await capture(window, to: out)
+            exit(0)
         }
+    }
+
+    @MainActor
+    private static func apply(album: String?, grouping: String?) {
+        if let album {
+            NotificationCenter.default.post(name: .selectAlbumForShot, object: album)
+        }
+        if let grouping {
+            NotificationCenter.default.post(name: .setGroupingForShot, object: grouping)
+        }
+    }
+
+    /// Polls for the first visible window. SwiftUI creates the scene on its own
+    /// schedule, and how long that takes depends on the machine, the library size and
+    /// how warm the caches are -- none of which a fixed sleep can know.
+    @MainActor
+    private static func firstVisibleWindow(within timeout: Duration) async -> NSWindow? {
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline {
+            if let window = NSApp.windows.first(where: { $0.isVisible }) { return window }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        return nil
     }
 
     private static func parse(_ s: String) -> NSSize? {
@@ -68,38 +105,68 @@ enum Shot {
         return NSSize(width: w, height: h)
     }
 
-    private static func capture(_ window: NSWindow, to url: URL) {
-        if let data = windowCapture(window) {
+    @MainActor
+    private static func capture(_ window: NSWindow, to url: URL) async {
+        if let data = await windowCapture(window) {
             try? data.write(to: url)
             FileHandle.standardError.write("shot via window capture\n".data(using: .utf8)!)
             return
         }
-        FileHandle.standardError.write("shot via layer render (window capture unavailable)\n".data(using: .utf8)!)
+        FileHandle.standardError.write("""
+            shot via layer render -- ScreenCaptureKit returned nothing.
+            Liquid Glass surfaces will be blank in this image. Grant Screen Recording to
+            the app in System Settings > Privacy & Security, then run --shot again.
+
+            """.data(using: .utf8)!)
         layerCapture(window, to: url)
     }
 
     /// Preferred path. Liquid Glass surfaces -- the sidebar, toolbar and every control
-    /// bezel -- are drawn by backdrop layers that sit outside the view's own layer
-    /// tree, so the layer-render fallback below captures them as blank white. Only a
-    /// compositor-level capture sees what is actually on screen.
+    /// bezel -- are drawn by backdrop layers that sit outside the view's own layer tree,
+    /// so the layer render below captures them as blank white. Only a compositor-level
+    /// capture sees what is actually on screen.
     ///
-    /// CGWindowListCreateImage is formally deprecated in favour of ScreenCaptureKit,
-    /// which is not a usable swap here: ScreenCaptureKit requires the Screen Recording
-    /// TCC grant even to capture your own window, which would put a permission dialog
-    /// in the way of regenerating a documentation screenshot. This call needs no grant.
-    /// Verified on macOS 27. The build therefore carries one deprecation warning on
-    /// purpose -- marking this function deprecated only moves the warning to the
-    /// caller, and so on up to App.init.
-    private static func windowCapture(_ window: NSWindow) -> Data? {
+    /// This used CGWindowListCreateImage until the deployment target moved to macOS 26,
+    /// where that call is not merely deprecated but unavailable. ScreenCaptureKit is the
+    /// replacement, and unlike the old call it needs the Screen Recording grant even for
+    /// the app's own window. That cost lands only on whoever regenerates the
+    /// documentation screenshots, never on someone using the app: nothing here runs
+    /// without --shot.
+    @MainActor
+    private static func windowCapture(_ window: NSWindow) async -> Data? {
         let id = CGWindowID(window.windowNumber)
-        guard id != 0,
-              let cg = CGWindowListCreateImage(.null, .optionIncludingWindow, id,
-                                               [.boundsIgnoreFraming, .bestResolution]),
-              cg.width > 1, cg.height > 1 else { return nil }
-        let rep = NSBitmapImageRep(cgImage: cg)
-        return rep.representation(using: .png, properties: [:])
+        guard id != 0 else { return nil }
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(
+                false, onScreenWindowsOnly: true)
+            guard let target = content.windows.first(where: { $0.windowID == id }) else {
+                return nil
+            }
+            let config = SCStreamConfiguration()
+            // Capture at backing scale, so the result matches what a Retina screenshot
+            // would give rather than a soft point-sized one.
+            let scale = window.backingScaleFactor
+            config.width = Int(target.frame.width * scale)
+            config.height = Int(target.frame.height * scale)
+            config.showsCursor = false
+            // Transparent behind the window, so the rounded corners and the shadow do
+            // not come out sitting on whatever happened to be on the desktop.
+            config.backgroundColor = .clear
+            config.ignoreShadowsSingleWindow = false
+
+            let filter = SCContentFilter(desktopIndependentWindow: target)
+            let image = try await SCScreenshotManager.captureImage(contentFilter: filter,
+                                                                  configuration: config)
+            guard image.width > 1, image.height > 1 else { return nil }
+            return NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+        } catch {
+            FileHandle.standardError.write(
+                "ScreenCaptureKit: \(error.localizedDescription)\n".data(using: .utf8)!)
+            return nil
+        }
     }
 
+    @MainActor
     private static func layerCapture(_ window: NSWindow, to url: URL) {
         guard let view = window.contentView else { exit(4) }
         let bounds = view.bounds

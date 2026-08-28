@@ -50,6 +50,35 @@ func filterAlbums(_ groups: [AlbumGroup], matching query: String) -> [AlbumGroup
     }
 }
 
+/// A completed fetch, carried back from the thread that ran it.
+///
+/// PhotoKit's types are not marked Sendable, but a PHFetchResult is a snapshot and
+/// PHObject is documented immutable -- nothing here is mutated after the fetch returns,
+/// and fetching off the main thread is what Apple's own guidance recommends for a
+/// library this size. This box is the single place that claim is made, rather than
+/// scattering @unchecked conformances across the store.
+private struct AssetBatch: @unchecked Sendable {
+    let fetch: PHFetchResult<PHAsset>
+    let assets: [PHAsset]
+    let downloadable: [PHAsset]
+}
+
+/// The collection to fetch from, on its way out to that thread. Same reasoning.
+private struct CollectionRef: @unchecked Sendable {
+    let collection: PHAssetCollection?
+}
+
+/// The sidebar, built on the thread that enumerated it. Same reasoning as AssetBatch:
+/// PHAssetCollection is an immutable snapshot, and this pass only reads.
+private struct AlbumSnapshot: @unchecked Sendable {
+    let groups: [AlbumGroup]
+}
+
+/// A fetch result on its way out to the thread that will materialise it.
+private struct FetchRef: @unchecked Sendable {
+    let fetch: PHFetchResult<PHAsset>
+}
+
 @MainActor
 final class PhotoStore: NSObject, ObservableObject {
     @Published var status: PHAuthorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
@@ -77,7 +106,14 @@ final class PhotoStore: NSObject, ObservableObject {
     private let imageManager = PHCachingImageManager()
     /// Kept so PHChange can hand back an updated fetch result for the open album.
     private var currentFetch: PHFetchResult<PHAsset>?
+    /// Debounces the recount that follows a library change.
     private var albumReloadTask: Task<Void, Never>?
+    /// The enumeration itself. Separate from the debounce above, which used to share
+    /// this handle and so cancelled the very task it was called from.
+    private var albumLoadTask: Task<Void, Never>?
+    private var selectTask: Task<Void, Never>?
+    /// Discards a fetch that finished after a newer selection started.
+    private var selectGeneration = 0
     private var observing = false
 
     /// Bumped whenever the library changes underneath us, so the destination
@@ -116,16 +152,34 @@ final class PhotoStore: NSObject, ObservableObject {
 
     /// Fetch options for an album. Hidden assets and shared-album assets are both
     /// excluded from ordinary fetches, so each needs opting into explicitly.
-    private func fetchOptions(for album: Album, sorted: Bool) -> PHFetchOptions {
+    nonisolated static func fetchOptions(includesHidden: Bool, sorted: Bool) -> PHFetchOptions {
         let options = PHFetchOptions()
         if sorted {
             options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         }
-        if album.includesHidden { options.includeHiddenAssets = true }
+        if includesHidden { options.includeHiddenAssets = true }
         return options
     }
 
     func loadAlbums() {
+        // Counting 77 collections is a quarter second of PhotoKit queries. It is a pure
+        // read pass, so it has no business holding the main actor while the sidebar and
+        // the grid are trying to draw.
+        albumLoadTask?.cancel()
+        albumLoadTask = Task { [weak self] in
+            let snapshot = await Task.detached(priority: .userInitiated) {
+                Log.measure("loadAlbums.enumerate") { PhotoStore.enumerateAlbums() }
+            }.value
+            guard let self, !Task.isCancelled else { return }
+            self.albumGroups = snapshot.groups
+            self.albums = snapshot.groups.flatMap(\.albums)
+            let (albumCount, groupCount) = (self.albums.count, snapshot.groups.count)
+            Log.library.notice("loaded \(albumCount, privacy: .public) albums in \(groupCount, privacy: .public) groups")
+            if self.selectedAlbum == nil { self.select(self.albums.first) }
+        }
+    }
+
+    nonisolated private static func enumerateAlbums() -> AlbumSnapshot {
         var groups: [AlbumGroup] = []
 
         // --- Library ---
@@ -253,11 +307,7 @@ final class PhotoStore: NSObject, ObservableObject {
                                notice: .recentlyDeleted))
         groups.append(AlbumGroup(id: "utilities", title: "Utilities", albums: utilities))
 
-        albumGroups = groups
-        albums = groups.flatMap(\.albums)
-        let (albumCount, groupCount) = (albums.count, groups.count)
-        Log.library.notice("loaded \(albumCount, privacy: .public) albums in \(groupCount, privacy: .public) groups")
-        if selectedAlbum == nil { select(albums.first) }
+        return AlbumSnapshot(groups: groups)
     }
 
     // MARK: - Assets
@@ -276,22 +326,43 @@ final class PhotoStore: NSObject, ObservableObject {
             return
         }
 
+        // The fetch runs off the main actor. It is most of a second for a 35,000-asset
+        // library, and doing it here meant the window could not draw -- not just this
+        // view, the window itself -- until it finished.
         isLoading = true
-        let options = fetchOptions(for: album, sorted: true)
+        selectGeneration &+= 1
+        let generation = selectGeneration
+        let source = CollectionRef(collection: album.collection)
+        let includesHidden = album.includesHidden
 
-        let result = album.collection.map { PHAsset.fetchAssets(in: $0, options: options) }
-            ?? PHAsset.fetchAssets(with: options)
-        currentFetch = result
+        selectTask?.cancel()
+        selectTask = Task { [weak self] in
+            let batch = await Task.detached(priority: .userInitiated) {
+                Log.measure("select.fetch") {
+                    let options = PhotoStore.fetchOptions(includesHidden: includesHidden,
+                                                          sorted: true)
+                    let result = source.collection
+                        .map { PHAsset.fetchAssets(in: $0, options: options) }
+                        ?? PHAsset.fetchAssets(with: options)
+                    let loaded = result.count == 0
+                        ? []
+                        : result.objects(at: IndexSet(0..<result.count))
+                    return AssetBatch(fetch: result,
+                                      assets: loaded,
+                                      downloadable: expandingBursts(loaded))
+                }
+            }.value
 
-        var loaded: [PHAsset] = []
-        loaded.reserveCapacity(result.count)
-        result.enumerateObjects { asset, _, _ in loaded.append(asset) }
-
-        assets = loaded
-        downloadableAssets = expandingBursts(loaded)
-        imageManager.stopCachingImagesForAllAssets()
-        rebuildSections()
-        isLoading = false
+            // A newer selection may have started while this one was in flight, and its
+            // result must win however the two finish.
+            guard let self, !Task.isCancelled, self.selectGeneration == generation else { return }
+            self.currentFetch = batch.fetch
+            self.assets = batch.assets
+            self.downloadableAssets = batch.downloadable
+            self.imageManager.stopCachingImagesForAllAssets()
+            Log.measure("select.rebuildSections") { self.rebuildSections() }
+            self.isLoading = false
+        }
     }
 
     /// Assets are fetched newest-first; reversing is cheaper than a second fetch.
@@ -374,23 +445,39 @@ extension PhotoStore: PHPhotoLibraryChangeObserver {
         guard let fetch = currentFetch,
               let details = change.changeDetails(for: fetch) else { return }
 
-        currentFetch = details.fetchResultAfterChanges
-        var loaded: [PHAsset] = []
-        loaded.reserveCapacity(details.fetchResultAfterChanges.count)
-        details.fetchResultAfterChanges.enumerateObjects { asset, _, _ in loaded.append(asset) }
+        let updated = details.fetchResultAfterChanges
+        currentFetch = updated
+        let inserted = details.insertedObjects.count
+        let carrier = FetchRef(fetch: updated)
 
-        assets = loaded
-        downloadableAssets = expandingBursts(loaded)
+        // Same reasoning as the initial load: rebuilding 35,000 assets is most of a
+        // second, and a download makes the library change constantly, so doing it here
+        // would jank the grid for the entire run.
+        selectTask?.cancel()
+        selectTask = Task { [weak self] in
+            let batch = await Task.detached(priority: .userInitiated) {
+                Log.measure("change.rematerialise") {
+                    let loaded = carrier.fetch.count == 0
+                        ? []
+                        : carrier.fetch.objects(at: IndexSet(0..<carrier.fetch.count))
+                    return AssetBatch(fetch: carrier.fetch,
+                                      assets: loaded,
+                                      downloadable: expandingBursts(loaded))
+                }
+            }.value
+            guard let self, !Task.isCancelled else { return }
+            self.assets = batch.assets
+            self.downloadableAssets = batch.downloadable
 
-        // Selection is held by identifier, so it survives a reload -- drop only the
-        // entries whose photo genuinely went away. Wiping it here would be maddening
-        // for someone half way through picking a few hundred photos.
-        let live = Set(loaded.map(\.localIdentifier))
-        selection.formIntersection(live)
+            // Selection is held by identifier, so it survives a reload -- drop only the
+            // entries whose photo genuinely went away. Wiping it here would be maddening
+            // for someone half way through picking a few hundred photos.
+            self.selection.formIntersection(Set(batch.assets.map(\.localIdentifier)))
 
-        rebuildSections()
-        arrivedSinceOpen += details.insertedObjects.count
-        libraryVersion += 1
+            self.rebuildSections()
+            self.arrivedSinceOpen += inserted
+            self.libraryVersion += 1
+        }
 
         // Counts across every album may have moved too. Debounced, because an import
         // fires a burst of changes and recounting 60 albums each time is wasteful.

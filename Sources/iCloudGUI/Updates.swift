@@ -57,12 +57,8 @@ enum Updates {
     /// running app; this exercises the half that can actually break on its own -- the
     /// request, GitHub's response shape, and the comparison.
     static func probe() -> Never {
-        // Blocking the main thread on a semaphore is fine here and nowhere else: this
-        // runs before the app has a UI, and the work it waits on is URLSession's, which
-        // never needs the main thread.
-        let done = DispatchSemaphore(value: 0)
-        var report = ""
         Task {
+            let report: String
             do {
                 let (tag, page) = try await fetchLatest()
                 report = """
@@ -74,11 +70,13 @@ enum Updates {
             } catch {
                 report = "failed: \(error.localizedDescription)"
             }
-            done.signal()
+            print(report)
+            exit(0)
         }
-        done.wait()
-        print(report)
-        exit(0)
+        // Parks the main thread so the task above can finish; it is what exits. Reached
+        // only via --updates, before any UI exists, so there is nothing else to service.
+        RunLoop.main.run()
+        fatalError("unreachable: RunLoop.main.run() does not return")
     }
 
     private struct Release: Decodable {

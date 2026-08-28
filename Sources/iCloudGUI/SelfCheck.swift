@@ -441,7 +441,10 @@ enum SelfCheck {
         expect(!Updates.isNewer("v1.2", than: "1.3"), "a dev build ahead of release is up to date")
     }
 
-    private static var passed = 0
+    // nonisolated(unsafe) because this whole enum runs on one thread before the app
+    // exists: run() is called from App.init, walks the assertions in order and calls
+    // exit() on the first failure or at the end. Nothing else can reach it.
+    nonisolated(unsafe) private static var passed = 0
 
     private static func expect(_ condition: Bool, _ label: String) {
         if condition {

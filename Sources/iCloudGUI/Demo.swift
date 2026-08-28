@@ -8,7 +8,10 @@ import Photos
 /// children, relatives and holidays. This substitutes generic album names and
 /// generated tiles so a screenshot shows the interface and nothing about its owner.
 enum Demo {
-    static var enabled = false
+    /// Read straight from the arguments rather than set at launch: it never changes
+    /// after the process starts, so as a `let` there is no shared mutable state for
+    /// Swift 6 to object to and no window in which it could be read before it is set.
+    static let enabled = CommandLine.arguments.contains("--demo")
 
     private static let albumNames = [
         "Vacation", "Weekend Trip", "Family", "Garden", "Hiking",

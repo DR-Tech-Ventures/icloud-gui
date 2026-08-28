@@ -8,6 +8,7 @@ enum About {
     /// Replaces the default About item. The stock panel shows only name, version and
     /// copyright; for an open-source app the licence and where to get the source
     /// matter just as much, and this is where people look for them.
+    @MainActor
     static func show() {
         NSApplication.shared.orderFrontStandardAboutPanel(options: [
             .credits: credits,

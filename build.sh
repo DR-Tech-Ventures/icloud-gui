@@ -9,14 +9,30 @@ BUNDLE_ID="${BUNDLE_ID:-com.drtechventures.icloudgui}"
 CONFIG="${1:-release}"
 APP="build/${APP_NAME}.app"
 
-# macOS decides whether an app gets the Liquid Glass design by a linked-on-or-after
-# check against the SDK version recorded in the binary's LC_BUILD_VERSION. SwiftPM has
-# no notion of an SDK version separate from the deployment target, so it stamps both
-# from Package.swift's .macOS(.v14) and the app is served the pre-Tahoe appearance
-# however new the SDK it was actually compiled against. Stamping the real SDK version
-# restores the split Xcode has by default: minos stays 14.0, sdk becomes the SDK in use.
+# SwiftPM has no notion of an SDK version separate from the deployment target, so it
+# stamps LC_BUILD_VERSION's sdk field from Package.swift rather than from the SDK it
+# actually compiled against. Stamping it restores the split Xcode has by default: minos
+# comes from the deployment target, sdk from the SDK in use.
+#
+# This was load-bearing when the target was macOS 14 -- the linked-on-or-after check
+# that gates Liquid Glass read the stamped value, saw 14.0 and served the old
+# appearance. At a macOS 26 target the design applies either way. It is kept because a
+# binary should say which SDK built it: that is what every other linked-on-or-after
+# check in the OS reads, and the next one will not announce itself either.
 SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
-MIN_VERSION="14.0"
+
+# Read from Package.swift rather than repeated here. This value is load-bearing twice --
+# it is stamped into the binary as minos and written to Info.plist as
+# LSMinimumSystemVersion -- while Package.swift is what the compiler actually targets.
+# Hardcoding it meant a contributor bumping only Package.swift would ship a binary
+# claiming macOS 14 support while compiled against newer APIs: a launch-time crash on
+# the oldest supported OS, and nothing anywhere would have said so.
+MIN_VERSION="$(sed -n 's/.*\.macOS(\.v\([0-9][0-9]*\)).*/\1.0/p' Package.swift | head -1)"
+if [ -z "$MIN_VERSION" ]; then
+    echo "Could not read the macOS deployment target from Package.swift." >&2
+    echo "Expected a platforms: [.macOS(.vNN)] entry." >&2
+    exit 1
+fi
 
 echo "==> Compiling ($CONFIG, SDK $SDK_VERSION, deployment target $MIN_VERSION)"
 swift build -c "$CONFIG" \
@@ -52,6 +68,36 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/iCloudGUI"
 cp Icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
+# The layered icon, for macOS 26's Dock and Finder. Compiling Icon/AppIcon.icon into an
+# Assets.car is what makes macOS draw the container, the shadow, the specular highlight
+# and the dark/clear/tinted variants itself, instead of using the flat bitmap in the
+# .icns -- which on Tahoe reads as an icon from two releases ago.
+#
+# Optional on purpose. actool ships inside Xcode.app and is NOT in the standalone
+# Command Line Tools, and this project's build has never needed full Xcode. Without it
+# you get the .icns on every macOS version, which is exactly what 1.2 shipped.
+ICON_NAME=""
+if ACTOOL="$(xcrun --find actool 2>/dev/null)" && [ -d "Icon/AppIcon.icon" ]; then
+    echo "==> Compiling layered icon"
+    # actool also renders its own AppIcon.icns from the .icon, but only down to 256px.
+    # Ours is drawn per size up to 1024 and stays sharp at 16px, so it is compiled to a
+    # scratch directory and only Assets.car is taken.
+    ICON_TMP="$(mktemp -d)"
+    "$ACTOOL" --compile "$ICON_TMP" --app-icon AppIcon \
+              --output-partial-info-plist "$ICON_TMP/partial.plist" \
+              --platform macosx --minimum-deployment-target "$MIN_VERSION" \
+              --include-all-app-icons "$PWD/Icon/AppIcon.icon" >/dev/null
+    if [ -f "$ICON_TMP/Assets.car" ]; then
+        cp "$ICON_TMP/Assets.car" "$APP/Contents/Resources/Assets.car"
+        # Pairs with Assets.car. macOS 26 prefers it; 14-25 ignore it and use
+        # CFBundleIconFile, so both keys are correct at once.
+        ICON_NAME="    <key>CFBundleIconName</key>          <string>AppIcon</string>"
+    fi
+    rm -rf "$ICON_TMP"
+else
+    echo "==> Layered icon skipped (needs Xcode; the .icns still ships)"
+fi
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -61,10 +107,11 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleDisplayName</key>       <string>${APP_NAME}</string>
     <key>CFBundleExecutable</key>        <string>iCloudGUI</string>
     <key>CFBundleIconFile</key>          <string>AppIcon</string>
+${ICON_NAME}
     <key>CFBundleIdentifier</key>        <string>${BUNDLE_ID}</string>
     <key>CFBundlePackageType</key>       <string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>1.2</string>
-    <key>CFBundleVersion</key>           <string>3</string>
+    <key>CFBundleShortVersionString</key><string>1.3</string>
+    <key>CFBundleVersion</key>           <string>4</string>
     <key>LSMinimumSystemVersion</key>    <string>${MIN_VERSION}</string>
     <key>NSHighResolutionCapable</key>   <true/>
     <key>NSHumanReadableCopyright</key>

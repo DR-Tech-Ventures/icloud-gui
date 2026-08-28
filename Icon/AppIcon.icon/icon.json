@@ -1,0 +1,20 @@
+{
+  "fill" : {
+    "automatic-gradient" : "extended-srgb:0.16000,0.42000,0.93000,1.00000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "glyph.png",
+          "name" : "Cloud and arrow"
+        }
+      ]
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [
+      "macOS"
+    ]
+  }
+}

@@ -164,11 +164,14 @@ struct RunLog {
         url = destination.appendingPathComponent(Self.filename)
     }
 
-    private static let stamp: ISO8601DateFormatter = {
+    /// Built per call rather than held as a shared formatter. ISO8601DateFormatter is
+    /// not Sendable, and this is written from whichever thread finished a download; the
+    /// allocation is nothing beside the unbuffered file write it accompanies.
+    private static var stamp: ISO8601DateFormatter {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime]
         return f
-    }()
+    }
 
     func started(items: Int, options: String) {
         append("RUN START\t\(items) items\t\(options)")

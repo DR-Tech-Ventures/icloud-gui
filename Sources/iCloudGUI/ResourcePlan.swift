@@ -193,22 +193,20 @@ func applyFinderTags(to url: URL, tags: [String]) -> Bool {
     guard !tags.isEmpty else { return true }
     let names = Array(Set(tags)).sorted()   // stable, de-duplicated
 
-    // Written as the extended attribute Finder itself reads, on every macOS version.
-    //
-    // URLResourceValues.tagNames gained a setter only in macOS 26, and #available does
-    // not help: it is a runtime check, while the setter has to exist in the SDK being
-    // compiled against. Gating it still breaks the build on an older toolchain -- which
-    // is exactly how CI caught this, having compiled clean on a macOS 27 SDK locally.
-    guard let data = try? PropertyListSerialization.data(
-        fromPropertyList: names, format: .binary, options: 0) else { return false }
-    let result = url.withUnsafeFileSystemRepresentation { path -> Int32 in
-        guard let path else { return -1 }
-        return data.withUnsafeBytes { buffer in
-            setxattr(path, "com.apple.metadata:_kMDItemUserTags",
-                     buffer.baseAddress, data.count, 0, 0)
-        }
+    // URLResourceValues.tagNames gained a setter in macOS 26, which is the deployment
+    // target, so this is the sanctioned API rather than a hand-rolled property list
+    // written into com.apple.metadata:_kMDItemUserTags with setxattr. That is what this
+    // did while the target was macOS 14: the setter has to exist in the SDK being
+    // compiled against, and #available cannot help with that -- it is a runtime check.
+    var target = url
+    var values = URLResourceValues()
+    values.tagNames = names
+    do {
+        try target.setResourceValues(values)
+        return true
+    } catch {
+        return false
     }
-    return result == 0
 }
 
 /// Appends " (2)", " (3)"... until `isTaken` says the name is free.

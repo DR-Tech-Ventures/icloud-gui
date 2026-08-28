@@ -9,7 +9,7 @@ cd icloud-gui
 ./run.sh             # build and launch
 ```
 
-You need macOS 14+ and the Xcode command line tools. There are **no third-party
+You need macOS 26+ and the Xcode command line tools. There are **no third-party
 dependencies** and no Xcode project — `swift build` plus a shell script that assembles
 the `.app`. Please keep it that way unless there is a strong reason not to.
 
@@ -132,7 +132,7 @@ There are diagnostic flags for the parts that need a real library. They print to
 | `--extras` | Burst frames, UUID filenames, favourites, locations. |
 | `--size` | Estimated size of a full backup. |
 | `--updates` | The update check, without the menu item: the request, GitHub's response shape and the version comparison. |
-| `--shot 1000x700` | Captures the window to `/tmp/icg-shot.png`. Needs no Screen Recording permission. |
+| `--shot 1280x840` | Captures the window to `/tmp/icg-shot.png`. Needs the Screen Recording permission. |
 | `--demo` | Generic album names and generated tiles, for screenshots. |
 | `--album <name>` | Select an album before capturing. |
 | `--group day\|month\|year` | Set the grid grouping before capturing. |
@@ -146,11 +146,21 @@ leaving the interface, layout and live scan output real.
 open "build/iCloud GUI.app" --args --demo --shot 1280x840 --album "All Photos" --group month
 ```
 
-`--shot` goes through `CGWindowListCreateImage` on the app's own window, which needs no
-Screen Recording grant. It cannot fall back to rendering the layer tree and stay
-correct: Liquid Glass draws the sidebar, the toolbar and every control bezel in backdrop
-layers that sit outside the view hierarchy, so a layer render captures them as blank
-white. That fallback is still in `Shot.swift` for a machine old enough not to have glass.
+`--shot` captures through ScreenCaptureKit, which **needs the Screen Recording
+permission**. Grant it once, to the built app, in System Settings > Privacy & Security >
+Screen Recording. Until you do, the capture falls back to rendering the layer tree, which
+cannot see Liquid Glass: the sidebar and toolbar come out blank white. It says so on
+stderr rather than quietly writing a broken image, so watch for
+
+```
+shot via layer render -- ScreenCaptureKit returned nothing.
+```
+
+This used `CGWindowListCreateImage`, which needed no grant, until the deployment target
+moved to macOS 26 -- where that call is not deprecated but unavailable.
+
+`--shot` waits for the window to appear rather than sleeping a fixed number of seconds,
+so a slow launch no longer produces a missing file and an unexplained exit code.
 
 Keep captures at or above the 1180pt minimum window width — narrower and macOS folds the
 toolbar's trailing items, Download included, behind a `»` overflow menu.
@@ -180,6 +190,16 @@ These were each found the hard way. The comments in the code say so too.
 - **Shared albums are downscaled by iCloud** (~2048px, video 720p). Not a bug.
 - **Hidden and Recently Deleted are macOS restrictions**, not missing features. Neither
   is reachable by any third-party app. Both are listed in the sidebar deliberately.
+
+## The deployment target
+
+`Package.swift` is the single source for it -- `build.sh` reads `.macOS(.vNN)` from
+there, stamps it into the binary as `minos` and writes it to `LSMinimumSystemVersion`, so
+there is nothing to keep in sync by hand.
+
+It is macOS 26. Lowering it again is not a one-line change: `ToolbarSpacer` in
+`ContentView.swift` needs the macOS 26 SDK, and Swift 6 language mode is on. Raising it
+further is free.
 
 ## Where the logs are
 
@@ -213,21 +233,48 @@ a bug report can attach one. See SECURITY.md.
 
 ## The app icon
 
-`Icon/AppIcon.icns` is generated, not hand-drawn — `Icon/make-icon.swift` draws it and
-`./Icon/make-icon.sh` regenerates the `.icns`. Committing the source rather than only a
-binary means the design can actually be edited.
+Two icons ship, from one design, and neither is hand-drawn.
 
-`make-icon.sh` also writes `Icon/Layers/` — `background.png` and `foreground.png` at
-1024px, the two layers the macOS 26 layered icon format wants. Neither carries the
-rounded-rect container, the shadow or the specular highlight that the `.icns` bakes in,
-because on macOS 26 the system draws those itself and differently per appearance
-(default, dark, clear, tinted).
+| File | Used by | Made by |
+|---|---|---|
+| `Icon/AppIcon.icns` | Fallback when Xcode is absent | `Icon/make-icon.swift`, rendered per size 16 to 1024 |
+| `Icon/AppIcon.icon` | Normal builds | `icon.json` (committed) plus a glyph PNG from the same script |
 
-Turning those layers into `AppIcon.icon` is a **manual step**: Icon Composer (bundled
-with Xcode, at *Xcode ▸ Open Developer Tool ▸ Icon Composer*) has no command-line
-interface and the `icon.json` format is undocumented, so it is not scriptable. Drag both
-layers in, export `AppIcon.icon`, and add it to the bundle alongside the `.icns` — which
-stays regardless, as it is still the icon macOS 14–25 uses.
+`./Icon/make-icon.sh` regenerates both. `build.sh` compiles the `.icon` with `actool`
+into `Assets.car` and adds `CFBundleIconName`; the `.icns` is copied in alongside it with
+`CFBundleIconFile`. macOS 26 prefers the first, older versions ignore it and use the
+second, so both keys are correct at once.
+
+**The layered icon is optional at build time.** `actool` lives inside `Xcode.app` and is
+*not* in the standalone Command Line Tools, which this project has otherwise never
+needed. Without Xcode the build prints `Layered icon skipped` and ships only the `.icns`
+-- the app is fine, it just gets the flat icon on Tahoe. CI has Xcode and asserts the
+layered icon was produced, because a silent skip is the failure mode worth catching.
+
+### Why the layers carry no container
+
+`icon.json` is an `automatic-gradient` fill and one layer holding the glyph. There is no
+background image, no rounded rectangle, no shadow and no specular highlight, because on
+macOS 26 the system draws all four itself and differently per appearance -- default,
+dark, clear and tinted. A layer that brings its own gets a second squircle inside the
+real one and a shadow that does not move with the light.
+
+The `.icns` bakes all of it in, because it is a flat bitmap with nothing to draw it.
+
+### Editing it
+
+The gradient colour is one line in `Icon/AppIcon.icon/icon.json`. The glyph comes from
+`drawGlyph` in `make-icon.swift`. `AppIcon.icon` is a real Icon Composer document, so
+*Xcode > Open Developer Tool > Icon Composer* opens it for visual editing -- but nothing
+in the pipeline needs that app, and the format is plain JSON beside a PNG.
+
+Do not judge the result from the glyph PNG alone; it is only the middle of the picture.
+Ask macOS what it actually draws, which is what Finder and the Dock show, container and
+lighting included:
+
+```swift
+NSWorkspace.shared.icon(forFile: "build/iCloud GUI.app")
+```
 
 ## Releasing
 
