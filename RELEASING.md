@@ -182,8 +182,35 @@ habit to spread, and it is not obviously better than having them build from sour
 you do it anyway, say plainly in the release notes what the command does and why it is
 needed.
 
+## Branch protection
+
+`main` requires a pull request and a green `build` check, enforced for administrators
+too. To restore the rule if it is ever lifted:
+
+```bash
+gh api -X PUT repos/DR-Tech-Ventures/icloud-gui/branches/main/protection --input - <<'JSON'
+{
+  "required_status_checks": { "strict": true, "contexts": ["build"] },
+  "enforce_admins": true,
+  "required_pull_request_reviews": {
+    "required_approving_review_count": 0,
+    "dismiss_stale_reviews": true
+  },
+  "restrictions": null,
+  "required_linear_history": true,
+  "allow_force_pushes": false,
+  "allow_deletions": false
+}
+JSON
+```
+
+`required_approving_review_count` is 0 deliberately: a pull request is required, but a
+sole maintainer cannot approve their own, and requiring one would make merging
+impossible.
+
 ## Release checklist
 
+- [ ] The change merged to `main` through a pull request with CI green
 - [ ] `./run.sh --self-check` passes
 - [ ] Bump `CFBundleShortVersionString` and `CFBundleVersion` in `build.sh`
 - [ ] Tag the release
