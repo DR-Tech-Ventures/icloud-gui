@@ -183,11 +183,9 @@ struct ContentView: View {
     /// decide to hide behind "»" at the minimum window width, and Download must never
     /// be the item it picks.
     ///
-    /// Deliberately no ToolbarSpacer between the two halves: it needs the macOS 26 SDK
-    /// to compile, which would stop the project building on the macOS 15 runner CI uses
-    /// and on any contributor's Mac without Tahoe -- and SwiftUI groups these items into
-    /// the same Liquid Glass clusters without it. Nothing here is macOS 26-only; the
-    /// glass comes from the SDK version build.sh stamps, not from source.
+    /// The ToolbarSpacer splits this into two Liquid Glass groups. It needs the macOS 26
+    /// SDK, which the deployment target now guarantees; before that it was left out so
+    /// the project would still build on older toolchains.
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem {
@@ -208,6 +206,11 @@ struct ContentView: View {
             }
             .help("Flip the sort order")
         }
+        // Splits the view controls from the destination and download cluster into two
+        // Liquid Glass groups. Needs the macOS 26 SDK to compile, which is now the
+        // deployment target.
+        ToolbarSpacer(.flexible)
+
         ToolbarItem { destinationMenu }
         ToolbarItem { fileOptionsMenu }
         ToolbarItem {

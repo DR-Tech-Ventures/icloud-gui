@@ -41,18 +41,18 @@ jobs:
       - name: Assemble app bundle
         run: ./build.sh release
 
-      # The whole point of build.sh's -platform_version flag. If SwiftPM ever starts
-      # stamping the SDK version itself, or the flag stops being accepted, the app
-      # silently reverts to the pre-Tahoe appearance -- silently is the problem, so
-      # assert it here rather than discovering it in a screenshot.
+      # build.sh stamps the real SDK version into the binary because SwiftPM stamps
+      # the deployment target instead. Assert the flag actually took effect, by
+      # comparing what the binary records against the SDK that is installed -- a
+      # mismatch means the stamp silently stopped working.
       - name: Check the binary records the real SDK version
         run: |
           sdk=$(otool -l "build/iCloud GUI.app/Contents/MacOS/iCloudGUI" \
                 | awk '/LC_BUILD_VERSION/{f=1} f&&/^ *sdk /{print $2; exit}')
-          echo "recorded SDK version: $sdk"
-          case "$sdk" in
-            14.*) echo "::error::SDK stamped as $sdk -- Liquid Glass will not be applied"; exit 1 ;;
-          esac
+          installed=$(xcrun --sdk macosx --show-sdk-version)
+          echo "recorded: $sdk   installed SDK: $installed"
+          [ "$sdk" = "$installed" ] || {
+            echo "::error::binary records SDK $sdk but $installed is installed"; exit 1; }
 
       # The runner has Xcode, so actool is present and the layered icon must have been
       # compiled. build.sh skips it silently by design on a machine without Xcode, which

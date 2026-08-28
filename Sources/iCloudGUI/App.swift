@@ -12,7 +12,6 @@ struct iCloudGUIApp: App {
         if CommandLine.arguments.contains("--size") { Probe.size() }
         if CommandLine.arguments.contains("--tags") { Probe.tags() }
         if CommandLine.arguments.contains("--updates") { Updates.probe() }
-        Demo.enabled = CommandLine.arguments.contains("--demo")
         Log.armLifecycle()
         Shot.arm()
     }

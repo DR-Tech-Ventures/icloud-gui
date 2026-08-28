@@ -9,12 +9,16 @@ BUNDLE_ID="${BUNDLE_ID:-com.drtechventures.icloudgui}"
 CONFIG="${1:-release}"
 APP="build/${APP_NAME}.app"
 
-# macOS decides whether an app gets the Liquid Glass design by a linked-on-or-after
-# check against the SDK version recorded in the binary's LC_BUILD_VERSION. SwiftPM has
-# no notion of an SDK version separate from the deployment target, so it stamps both
-# from Package.swift's .macOS(.v14) and the app is served the pre-Tahoe appearance
-# however new the SDK it was actually compiled against. Stamping the real SDK version
-# restores the split Xcode has by default: minos stays 14.0, sdk becomes the SDK in use.
+# SwiftPM has no notion of an SDK version separate from the deployment target, so it
+# stamps LC_BUILD_VERSION's sdk field from Package.swift rather than from the SDK it
+# actually compiled against. Stamping it restores the split Xcode has by default: minos
+# comes from the deployment target, sdk from the SDK in use.
+#
+# This was load-bearing when the target was macOS 14 -- the linked-on-or-after check
+# that gates Liquid Glass read the stamped value, saw 14.0 and served the old
+# appearance. At a macOS 26 target the design applies either way. It is kept because a
+# binary should say which SDK built it: that is what every other linked-on-or-after
+# check in the OS reads, and the next one will not announce itself either.
 SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
 
 # Read from Package.swift rather than repeated here. This value is load-bearing twice --

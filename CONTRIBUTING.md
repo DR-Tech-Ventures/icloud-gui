@@ -9,7 +9,7 @@ cd icloud-gui
 ./run.sh             # build and launch
 ```
 
-You need macOS 14+ and the Xcode command line tools. There are **no third-party
+You need macOS 26+ and the Xcode command line tools. There are **no third-party
 dependencies** and no Xcode project — `swift build` plus a shell script that assembles
 the `.app`. Please keep it that way unless there is a strong reason not to.
 
@@ -132,7 +132,7 @@ There are diagnostic flags for the parts that need a real library. They print to
 | `--extras` | Burst frames, UUID filenames, favourites, locations. |
 | `--size` | Estimated size of a full backup. |
 | `--updates` | The update check, without the menu item: the request, GitHub's response shape and the version comparison. |
-| `--shot 1000x700` | Captures the window to `/tmp/icg-shot.png`. Needs no Screen Recording permission. |
+| `--shot 1280x840` | Captures the window to `/tmp/icg-shot.png`. Needs the Screen Recording permission. |
 | `--demo` | Generic album names and generated tiles, for screenshots. |
 | `--album <name>` | Select an album before capturing. |
 | `--group day\|month\|year` | Set the grid grouping before capturing. |
@@ -146,11 +146,21 @@ leaving the interface, layout and live scan output real.
 open "build/iCloud GUI.app" --args --demo --shot 1280x840 --album "All Photos" --group month
 ```
 
-`--shot` goes through `CGWindowListCreateImage` on the app's own window, which needs no
-Screen Recording grant. It cannot fall back to rendering the layer tree and stay
-correct: Liquid Glass draws the sidebar, the toolbar and every control bezel in backdrop
-layers that sit outside the view hierarchy, so a layer render captures them as blank
-white. That fallback is still in `Shot.swift` for a machine old enough not to have glass.
+`--shot` captures through ScreenCaptureKit, which **needs the Screen Recording
+permission**. Grant it once, to the built app, in System Settings > Privacy & Security >
+Screen Recording. Until you do, the capture falls back to rendering the layer tree, which
+cannot see Liquid Glass: the sidebar and toolbar come out blank white. It says so on
+stderr rather than quietly writing a broken image, so watch for
+
+```
+shot via layer render -- ScreenCaptureKit returned nothing.
+```
+
+This used `CGWindowListCreateImage`, which needed no grant, until the deployment target
+moved to macOS 26 -- where that call is not deprecated but unavailable.
+
+`--shot` waits for the window to appear rather than sleeping a fixed number of seconds,
+so a slow launch no longer produces a missing file and an unexplained exit code.
 
 Keep captures at or above the 1180pt minimum window width — narrower and macOS folds the
 toolbar's trailing items, Download included, behind a `»` overflow menu.
@@ -181,19 +191,15 @@ These were each found the hard way. The comments in the code say so too.
 - **Hidden and Recently Deleted are macOS restrictions**, not missing features. Neither
   is reachable by any third-party app. Both are listed in the sidebar deliberately.
 
-## Raising the deployment target
+## The deployment target
 
 `Package.swift` is the single source for it -- `build.sh` reads `.macOS(.vNN)` from
 there, stamps it into the binary as `minos` and writes it to `LSMinimumSystemVersion`, so
 there is nothing to keep in sync by hand.
 
-One thing blocks raising it above macOS 14 today. `Shot.swift` captures the window with
-`CGWindowListCreateImage`, which the SDK marks **obsoleted in macOS 15.0**. At a
-deployment target of 14 that is a warning; at 15 or higher it is a hard `unavailable`
-error and the build stops. It is used because it is the only way to capture the app's own
-window without the Screen Recording permission, which the documentation screenshots
-depend on. Whoever raises the target has to replace it first -- ScreenCaptureKit plus a
-permission prompt, or dropping `--shot` and capturing by hand.
+It is macOS 26. Lowering it again is not a one-line change: `ToolbarSpacer` in
+`ContentView.swift` needs the macOS 26 SDK, and Swift 6 language mode is on. Raising it
+further is free.
 
 ## Where the logs are
 
@@ -231,8 +237,8 @@ Two icons ship, from one design, and neither is hand-drawn.
 
 | File | Used by | Made by |
 |---|---|---|
-| `Icon/AppIcon.icns` | macOS 14-25 | `Icon/make-icon.swift`, rendered per size 16 to 1024 |
-| `Icon/AppIcon.icon` | macOS 26+ | `icon.json` (committed) plus a glyph PNG from the same script |
+| `Icon/AppIcon.icns` | Fallback when Xcode is absent | `Icon/make-icon.swift`, rendered per size 16 to 1024 |
+| `Icon/AppIcon.icon` | Normal builds | `icon.json` (committed) plus a glyph PNG from the same script |
 
 `./Icon/make-icon.sh` regenerates both. `build.sh` compiles the `.icon` with `actool`
 into `Assets.car` and adds `CFBundleIconName`; the `.icns` is copied in alongside it with
@@ -253,7 +259,7 @@ macOS 26 the system draws all four itself and differently per appearance -- defa
 dark, clear and tinted. A layer that brings its own gets a second squircle inside the
 real one and a shadow that does not move with the light.
 
-The `.icns` bakes all of it in, because macOS 14-25 draw none of it.
+The `.icns` bakes all of it in, because it is a flat bitmap with nothing to draw it.
 
 ### Editing it
 

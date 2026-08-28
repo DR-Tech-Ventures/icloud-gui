@@ -2,18 +2,27 @@
 
 ## 1.3
 
-**The app icon is now a layered macOS 26 icon, drawn by the system rather than baked
-into a bitmap.**
+**Requires macOS 26. The app icon is now layered and drawn by the system.**
 
+- **macOS 26 is the minimum.** 1.2 ran on macOS 14 and later. If you are on Sonoma or
+  Sequoia, stay on 1.2 — it is complete and still works. Everything the app does that
+  people care about, it already did there.
+- **Swift 6 language mode**, with compile-time data-race checking on. Three pieces of
+  shared mutable state that the compiler could not prove safe are gone rather than
+  annotated away: the demo flag is read from the arguments instead of assigned at launch,
+  the run log builds its date formatter per call instead of sharing one, and the probe's
+  log is a locked type instead of a captured local — that last one was a real data race
+  that happened not to fire.
+- **The toolbar's two halves are now separate Liquid Glass groups**, via `ToolbarSpacer`.
+  It needs the macOS 26 SDK, which is why 1.2 left it out.
 - **Layered app icon.** `Icon/AppIcon.icon` carries a gradient fill and a single glyph
   layer -- no container, no shadow, no specular highlight. On macOS 26 the system draws
   all three itself, and differently per appearance (default, dark, clear, tinted), so the
   glyph picks up real edge lighting and depth instead of the flat bitmap 1.2 shipped.
   `build.sh` compiles it with `actool` into `Assets.car`.
-- **macOS 14-25 are unchanged.** The hand-rendered `AppIcon.icns` still ships and is
-  still what they use -- it is drawn per size from 16 to 1024, where `actool`'s generated
-  fallback stops at 256. Both `CFBundleIconFile` and `CFBundleIconName` are set, and each
-  OS picks the one it understands.
+  The hand-rendered `AppIcon.icns` still ships beside it as the fallback for a build
+  without Xcode -- it is drawn per size from 16 to 1024, where `actool`'s own generated
+  fallback stops at 256.
 - **Building still does not require Xcode.** `actool` ships inside `Xcode.app` and not in
   the Command Line Tools, so the layered icon is compiled only when it is available.
   Without it the build says so and ships the `.icns` alone. CI has Xcode and now asserts
@@ -22,6 +31,13 @@ into a bitmap.**
 - `Icon/Layers/` is gone, replaced by the real `Icon/AppIcon.icon` document. 1.2 shipped
   those two PNGs as a hand-off to Icon Composer; the format turned out to be plain JSON
   beside a PNG, so the hand-off is not needed and the icon is fully scripted.
+
+**Fixes**
+
+- **`--shot` waited a fixed nine seconds for the window and gave up if it was not there.**
+  When launch got slower than that guess it exited with code 3 and no file, which is a
+  miserable thing to diagnose from a missing screenshot. It now waits for the window to
+  appear.
 
 ## 1.2
 

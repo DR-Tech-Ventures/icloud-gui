@@ -261,11 +261,25 @@ enum Probe {
 
     static func run() {
         let out = URL(fileURLWithPath: "/tmp/icloudgui-probe.txt")
-        var log: [String] = []
-        func note(_ s: String) {
-            log.append(s)
-            try? log.joined(separator: "\n").write(to: out, atomically: true, encoding: .utf8)
+        // A reference type rather than a local array: PhotoKit delivers the
+        // authorization result on an arbitrary thread, and Swift 6 will not let a
+        // closure running there capture and mutate a local var. The lock keeps the two
+        // writers honest; without it this was a data race that happened not to fire.
+        final class Log: @unchecked Sendable {
+            private let lock = NSLock()
+            private var lines: [String] = []
+            let out: URL
+            init(out: URL) { self.out = out }
+            func note(_ s: String) {
+                lock.lock()
+                lines.append(s)
+                let snapshot = lines.joined(separator: "\n")
+                lock.unlock()
+                try? snapshot.write(to: out, atomically: true, encoding: .utf8)
+            }
         }
+        let log = Log(out: out)
+        let note = { @Sendable (s: String) in log.note(s) }
 
         note("bundleID: \(Bundle.main.bundleIdentifier ?? "nil")")
         note("bundlePath: \(Bundle.main.bundlePath)")

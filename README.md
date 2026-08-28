@@ -83,8 +83,7 @@ entire photo library — see [RELEASING.md](RELEASING.md) for why that is not of
 
 ## Requirements
 
-- macOS 14+ (on macOS 26 and later the app picks up the Liquid Glass design and the
-  layered app icon)
+- macOS 26 or later
 - Photos app signed into iCloud with **iCloud Photos** turned on
   (System Settings › [your name] › iCloud › Photos)
 - Xcode command line tools (for building)
