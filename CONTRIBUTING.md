@@ -41,6 +41,55 @@ gh api -X DELETE repos/DR-Tech-Ventures/icloud-gui/branches/main/protection
 # then re-apply it; the settings are recorded in RELEASING.md
 ```
 
+## The pipeline, end to end
+
+```
+  branch  ──▶  push  ──▶  pull request  ──▶  main  ──▶  tag v*  ──▶  release
+                             │                 │           │            │
+                             ▼                 ▼           ▼            ▼
+                        CI: build          CI: build   CI: build   ./release.sh
+                        + self-check       + self-check + self-check  by hand
+                                                                   on a Mac
+```
+
+**What CI runs** (`.github/workflows/ci.yml`, `macos-15`):
+
+| Step | What it proves |
+|---|---|
+| `swift build -c release` | It compiles on a clean machine with no local state |
+| `iCloudGUI --self-check` | All assertions pass. Exits non-zero on the first failure. |
+| `./build.sh release` | The `.app` bundle assembles and signs |
+
+**What triggers it:** every pull request, every push to `main`, and every `v*` tag.
+
+**What CI does not do:** sign or notarise a release. The bundle it assembles is ad-hoc
+signed, because the runner has no Developer ID identity, and it is discarded. Releases
+are cut by hand — [RELEASING.md](RELEASING.md) explains why, and it is a decision rather
+than an omission.
+
+**What CI cannot cover:** anything touching PhotoKit needs a real photo library and a
+signed-in iCloud account. That is why every decision which could lose a photo lives in a
+pure function — resource selection, path building, collision handling, the incremental
+diff — and why the assertions can run on a runner with no photos at all.
+
+**When CI fails:** `gh run view --log-failed` shows the failing step. It has already
+caught a real portability bug that could not reproduce locally, where an API existed on
+the newer SDK used for development but not on the runner's.
+
+## Every pull request carries its documentation
+
+A change and the documentation describing it go in the **same pull request**. Before
+opening one, check whether it touches anything described in `README.md`, this file,
+`RELEASING.md`, `SECURITY.md`, or the in-app guide in `Guide.swift`.
+
+**Bump the version** in `build.sh` — both `CFBundleShortVersionString` and
+`CFBundleVersion` — whenever anything under `Sources/` or `build.sh` changes, and add a
+`CHANGELOG.md` entry. Tooling-only changes (CI, scripts) need neither: `CHANGELOG.md`
+tracks what a user of the app can observe.
+
+`release.sh` refuses to build a version that already has a tag, so a forgotten bump
+fails in a second rather than after a round trip to Apple's notary service.
+
 ## Before opening a PR
 
 ```bash
