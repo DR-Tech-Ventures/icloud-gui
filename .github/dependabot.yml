@@ -1,0 +1,24 @@
+# What this repository actually has to keep current is GitHub Actions, and only one of
+# them. There are no third-party Swift packages -- Package.swift declares no
+# dependencies and there is no Package.resolved -- so no "swift" ecosystem entry is
+# listed here; it would have nothing to look at.
+#
+# This exists because the actions/checkout Node 20 deprecation was noticed from a build
+# warning rather than from anything watching. One action is little enough to update by
+# hand and easy enough to forget.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
+    groups:
+      # One PR for the lot rather than one per action. There is currently a single
+      # action; grouping keeps that true if more are ever added.
+      actions:
+        patterns:
+          - "*"
