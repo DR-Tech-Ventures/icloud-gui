@@ -23,7 +23,11 @@ jobs:
       # warning. v5 through v7 all declare node24; v7 is current and changes nothing we
       # use -- its one behaviour change blocks checking out fork PRs under
       # pull_request_target and workflow_run, and this workflow uses neither.
-      - uses: actions/checkout@v7
+      #
+      # Pinned to the commit rather than the tag: a tag is mutable, so `@v7` runs
+      # whatever that tag points at on the day the workflow runs. Dependabot keeps the
+      # SHA and the version comment on that line in step with each other.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Show toolchain
         run: swift --version
