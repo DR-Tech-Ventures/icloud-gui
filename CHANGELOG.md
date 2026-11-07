@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.4
+
+**Requires macOS 27. The app now tells you how big a download is before it starts.**
+
+- **macOS 27 is the minimum.** 1.3.x ran on macOS 26. If you are on Tahoe, stay on 1.3.2 —
+  it is complete and does everything this release does except show download sizes.
+- **The destination line now says how much there is to fetch**, not just how many files:
+  "1,240 new (1,312 files, 8.4 GB)". That comes from `PHAssetResource.dataSize`, which is
+  new in macOS 27 and is the whole reason for the version bump.
+- **It warns when the download will not fit**, instead of guessing from a fixed
+  threshold. The free-space figure turns red and says "not enough" when what is still to
+  download is larger than the space left. Previously it went orange under 25 GB, which is
+  ample for a 3 GB run and hopeless for a 200 GB one.
+- **Unknown sizes are reported as unknown.** PhotoKit only knows a resource's size once
+  it is local, so for an iCloud-only library many sizes come back nil — which is the
+  common case here, not the exception. Those are counted separately and the total reads
+  "at least 8.4 GB" rather than pretending to be complete. The app never claims a run
+  *will* fit: with sizes missing that is not something it can know, and for a backup tool
+  guessing in the reassuring direction is the failure that actually costs you photos.
+- **`PHAssetResource.originalFilename` is deprecated in macOS 27**, so filenames now come
+  from `filename`. That property is optional where the old one was not, and the fallback
+  is deliberately the deprecated property rather than a name of our own: the download
+  ledger keys on the path it wrote, so a photo whose name changed between versions would
+  read as missing and be downloaded a second time. Every file already on disk stays
+  recognisable.
+- **CI now builds against the same SDK as releases.** It ran on the `macos-26` image,
+  which carries Xcode 26.6 and so compiled against the macOS 26 SDK, while releases were
+  built against 27. The step that checks the stamped SDK could never have caught that — it
+  compares the binary against whatever SDK the machine running it has, so it passed on
+  both while the two disagreed.
+
 ## 1.3.2
 
 **Hardening, from an audit that found no vulnerabilities.** Nothing here fixes a bug you

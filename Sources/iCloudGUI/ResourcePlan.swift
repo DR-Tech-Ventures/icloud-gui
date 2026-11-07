@@ -80,6 +80,28 @@ func planResources(
 
 // MARK: - Filenames
 
+/// The filename PhotoKit reports for a resource.
+///
+/// macOS 27 deprecated `originalFilename` in favour of `filename`, which is *optional*
+/// where the old one was not. The fallback is the deprecated property rather than a name
+/// of our own making, and that is the whole point: this app's ledger keys on the relative
+/// path it wrote, so an asset whose name changes between versions reads as missing and is
+/// fetched again as a duplicate. Falling back to exactly what 1.3 used keeps every
+/// already-downloaded file recognisable. Inventing a name here would be the silent-
+/// duplication bug the ledger exists to prevent.
+///
+/// This is the only place either property is read, so the deprecation is one warning in
+/// one spot rather than three scattered through the download path.
+///
+/// ponytail: the deprecated call stays while `filename` is optional. Ceiling: one
+/// build-time deprecation warning, deliberately. Upgrade path: delete the fallback when a
+/// macOS 28 target makes `originalFilename` unavailable rather than deprecated -- by then
+/// every install has written its ledger through a 27 build.
+func resourceFilename(_ resource: PHAssetResource) -> String {
+    if let name = resource.filename, !name.isEmpty { return name }
+    return resource.originalFilename
+}
+
 // Tab and newline are stripped so a filename can never corrupt a ledger row.
 private let illegalFilenameChars = CharacterSet(charactersIn: "/:\0\t\n\r")
 

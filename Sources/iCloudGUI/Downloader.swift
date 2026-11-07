@@ -230,7 +230,7 @@ final class Downloader: ObservableObject {
             if Task.isCancelled { return outcome }
             let resource = resources[planned.index]
             let relative = relativePath(creationDate: asset.creationDate,
-                                        filename: resource.originalFilename,
+                                        filename: resourceFilename(resource),
                                         role: planned.role,
                                         layout: layout,
                                         datePrefix: datePrefix)
