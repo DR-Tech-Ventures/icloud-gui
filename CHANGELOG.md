@@ -4,8 +4,10 @@
 
 **Requires macOS 27. The app now tells you how big a download is before it starts.**
 
-- **macOS 27 is the minimum.** 1.3.x ran on macOS 26. If you are on Tahoe, stay on 1.3.2 —
-  it is complete and does everything this release does except show download sizes.
+- **macOS 27 is the minimum.** 1.3.x ran on macOS 26. If you are on Tahoe, stay on
+  [1.3.1](https://github.com/DR-Tech-Ventures/icloud-gui/releases/tag/v1.3.1) — the
+  newest release that runs there. It does everything this one does except show download
+  sizes.
 - **The destination line now says how much there is to fetch**, not just how many files:
   "1,240 new (1,312 files, 8.4 GB)". That comes from `PHAssetResource.dataSize`, which is
   new in macOS 27 and is the whole reason for the version bump.
@@ -31,7 +33,10 @@
   compares the binary against whatever SDK the machine running it has, so it passed on
   both while the two disagreed.
 
-## 1.3.2
+## 1.3.2 — prepared, never published
+
+*No release was ever cut under this number — there is no `v1.3.2` tag and nothing to
+download. These changes shipped in 1.4. Kept here for the record.*
 
 **Hardening, from an audit that found no vulnerabilities.** Nothing here fixes a bug you
 could hit. Three places were doing more than they needed to, and all three are cheaper to
