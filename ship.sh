@@ -71,6 +71,18 @@ git fetch --tags --quiet origin main 2>/dev/null || true
 if [ -n "$(git rev-list HEAD..origin/main 2>/dev/null)" ]; then
     die "origin/main is ahead of this checkout. Pull first."
 fi
+# And the other direction, which matters more. `gh release create` with no --target tags
+# whatever the REMOTE default branch points at, so an unpushed commit here would notarise
+# a binary built from code the tag does not name: a signed, published artifact whose
+# source is not the tagged source. Nothing downstream would ever flag it.
+if [ -n "$(git rev-list origin/main..HEAD 2>/dev/null)" ]; then
+    die "This checkout has commits that are not on origin/main. Push them first --
+the release tag is created from origin/main, so it would not point at the
+code this would build and notarise."
+fi
+# Belt and braces: pin the tag to the exact commit that gets built, so even a push to
+# main between the check above and the release below cannot move it.
+TARGET_SHA="$(git rev-parse HEAD)"
 
 if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
     die "v$VERSION is already tagged, so it has already been published.
@@ -109,6 +121,7 @@ if [ "$DRY_RUN" = 1 ]; then
     bump_cask "$TMP/cask.rb" "$VERSION" "0000000000000000000000000000000000000000000000000000000000000000"
     echo
     echo "Would publish: v$VERSION  (title: iCloud GUI $VERSION)"
+    echo "Would tag:     ${TARGET_SHA:0:8} -- the commit this checkout is on"
     echo "Would attach:  $DMG"
     echo "Would set cask version/sha256 in $CASK_REL and push to $(git -C "$TAP_DIR" remote get-url origin)"
     echo
@@ -121,19 +134,51 @@ fi
 # --- Build, sign, notarise --------------------------------------------------
 if [ "$PUBLISH_ONLY" = 1 ]; then
     [ -f "$DMG" ] || die "--publish-only needs an existing $DMG. Run without it."
-    say "Skipping the build; publishing the existing $DMG"
+
+    # Everything below is here because a leftover disk image from an EARLIER version
+    # passes every signature check there is while containing the wrong build. Signing
+    # and notarisation say "Apple vouches for these bytes", not "these bytes are the
+    # version you are about to claim they are". Without this, --publish-only will
+    # cheerfully publish v1.4.1 with 1.4's binary inside and a matching checksum in the
+    # cask, so every check downstream agrees with every other one and all of them are
+    # describing the wrong app.
+    say "Checking the existing $DMG before publishing it"
+
+    xcrun stapler validate "$DMG" >/dev/null 2>&1 \
+        || die "$DMG has no stapled notarisation ticket.
+Run without --publish-only to build and notarise $VERSION."
+    spctl -a -t open --context context:primary-signature "$DMG" >/dev/null 2>&1 \
+        || die "Gatekeeper does not accept $DMG.
+Run without --publish-only to build and notarise $VERSION."
+
+    # Read the version out of the image itself. The filename carries no version, so it
+    # is the only thing that can distinguish this build from last release's.
+    MNT="$(mktemp -d)"
+    hdiutil attach "$DMG" -mountpoint "$MNT" -nobrowse -quiet -readonly \
+        || die "Could not mount $DMG to check which version it contains."
+    DMG_VERSION="$(plutil -extract CFBundleShortVersionString raw \
+                   "$MNT/iCloud GUI.app/Contents/Info.plist" 2>/dev/null || true)"
+    hdiutil detach "$MNT" -quiet >/dev/null 2>&1 || true
+    rmdir "$MNT" 2>/dev/null || true
+
+    [ "$DMG_VERSION" = "$VERSION" ] || die "$DMG contains version ${DMG_VERSION:-unknown}, but this would publish $VERSION.
+That disk image is from an earlier release. Run without --publish-only."
+
+    say "Skipping the build; publishing the existing $DMG (verified $DMG_VERSION)"
 else
     ./release.sh
 fi
 [ -f "$DMG" ] || die "release.sh did not leave a disk image at $DMG."
 
 # --- Publish ----------------------------------------------------------------
-# gh creates the tag at HEAD, so this is the step that makes the version real.
+# --target pins the tag to the commit verified in preflight, rather than letting gh take
+# whatever origin/main points at now. This is the step that makes the version real.
 say "Creating GitHub release v$VERSION"
 NOTES_FILE="$(mktemp)"; trap 'rm -f "$NOTES_FILE"' EXIT
 printf '%s\n' "$NOTES" > "$NOTES_FILE"
 gh release create "v$VERSION" "$DMG" \
    --repo DR-Tech-Ventures/icloud-gui \
+   --target "$TARGET_SHA" \
    --title "iCloud GUI $VERSION" \
    --notes-file "$NOTES_FILE"
 
