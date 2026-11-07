@@ -148,12 +148,28 @@ enum Updates {
         let alert = NSAlert()
         if isNewer(tag, than: currentVersion) {
             alert.messageText = "Version \(normalise(tag)) is available"
+            // Both paths, rather than detecting which one applies.
+            //
+            // Homebrew moves the app into /Applications instead of symlinking it, so a
+            // brew-installed copy is indistinguishable from a dragged one from the
+            // inside. Telling the two apart would mean looking for a Caskroom beside a
+            // guessed prefix -- /opt/homebrew on Apple silicon, /usr/local on Intel,
+            // anywhere at all with HOMEBREW_PREFIX set -- and guessing wrong puts us
+            // back where this started: confident advice that desynchronises someone's
+            // install. Two sentences cost nothing and cannot be wrong.
+            //
+            // Dragging a disk image over a brew-managed copy leaves Homebrew still
+            // believing the old version is installed, which `brew upgrade` will not
+            // repair, so the brew line goes first for the people it applies to.
             alert.informativeText = """
                 You are running \(currentVersion).
 
-                Releases are published on GitHub as a signed, notarised disk image. \
-                Open it and drag iCloud GUI onto the Applications shortcut, replacing \
-                the copy you have.
+                Installed with Homebrew? Run:
+                brew upgrade --cask dr-tech-ventures/tap/icloud-gui
+
+                Otherwise, releases are published on GitHub as a signed, notarised \
+                disk image. Open it and drag iCloud GUI onto the Applications \
+                shortcut, replacing the copy you have.
                 """
             alert.addButton(withTitle: "Open Release Page")
             alert.addButton(withTitle: "Later")
