@@ -54,6 +54,30 @@ defaults delete com.drtechventures.icloudgui hasSeenGuide
 
 ## Installing
 
+**With Homebrew.** The same signed, notarised release, kept up to date for you:
+
+```bash
+brew install --cask dr-tech-ventures/tap/icloud-gui
+```
+
+Use the full `dr-tech-ventures/tap/icloud-gui` name rather than the short `icloud-gui`.
+Since Homebrew 6.0 a tap outside the official ones has to be trusted before its code is
+loaded, and installing by full name is what grants that; short-name commands fail until
+you `brew trust dr-tech-ventures/tap`. Upgrades are `brew upgrade --cask
+dr-tech-ventures/tap/icloud-gui`.
+
+The cask lives in [DR-Tech-Ventures/homebrew-tap](https://github.com/DR-Tech-Ventures/homebrew-tap).
+It is not in Homebrew's own index because [a new cask there](https://docs.brew.sh/Package-Acceptance-Policy)
+needs 30 forks, 30 watchers or 75 stars — tripled when the person submitting owns the
+repository — and this project has none of those. Nothing is lost by a tap: same install,
+same upgrades, same uninstall, only the tap name in front.
+
+If you already have iCloud GUI in `/Applications` from the disk image, Homebrew will not
+take over that copy. Move it to the Trash first, then install. Your downloaded photos are
+untouched — they live in whichever destination folder you picked, not inside the app —
+and because releases are signed with the same certificate, macOS does not re-ask for
+Photos access.
+
 **Build it yourself.** There are no dependencies and no Xcode project, so this is three
 commands — and a locally built app is never quarantined, so macOS Gatekeeper never gets
 in the way:
