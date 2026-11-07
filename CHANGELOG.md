@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.4.1
+
+**"Check for Updates…" no longer tells Homebrew users to do the wrong thing.**
+
+- **The update alert now covers both ways of installing.** It said to open the disk image
+  and drag the app into place, which is right if that is how you installed it and wrong
+  if you used `brew install --cask`: dragging a disk image over a Homebrew-managed copy
+  leaves Homebrew still believing the old version is there, and `brew upgrade` will not
+  put that right afterwards. The alert now gives the `brew upgrade` command first and the
+  disk image instructions after it.
+
+  It does not try to detect which applies. Homebrew moves the app into `/Applications`
+  rather than symlinking it, so a brew-installed copy looks identical from the inside;
+  telling them apart would mean hunting for a Caskroom beside a guessed prefix, and
+  guessing wrong would land right back on confident advice that breaks someone's install.
+
 ## 1.4
 
 **Requires macOS 27. The app now tells you how big a download is before it starts.**
