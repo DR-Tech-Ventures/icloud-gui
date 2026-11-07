@@ -439,6 +439,28 @@ enum SelfCheck {
 
         // A local build ahead of the published release must not be told to downgrade.
         expect(!Updates.isNewer("v1.2", than: "1.3"), "a dev build ahead of release is up to date")
+
+        checkReleasePage()
+    }
+
+    /// The release URL goes to `NSWorkspace.shared.open`, so what it accepts is a
+    /// security boundary rather than a parsing nicety. Asserted because a guard that
+    /// quietly stops guarding looks exactly like one that works.
+    private static func checkReleasePage() {
+        expect(Updates.releasePage("https://github.com/DR-Tech-Ventures/icloud-gui/releases/tag/v1.3.2") != nil,
+               "a real GitHub release URL is accepted")
+        expect(Updates.releasePage("https://GitHub.com/x/y/releases") != nil,
+               "host comparison ignores case")
+
+        expect(Updates.releasePage("http://github.com/x/y/releases") == nil,
+               "plain http is refused")
+        expect(Updates.releasePage("file:///Applications/Calculator.app") == nil,
+               "a file URL cannot be launched")
+        expect(Updates.releasePage("https://github.com.evil.example/x") == nil,
+               "a lookalike host is not github.com")
+        expect(Updates.releasePage("https://evil.example/github.com/x") == nil,
+               "github.com in the path does not make it the host")
+        expect(Updates.releasePage("") == nil, "an empty string is refused")
     }
 
     // nonisolated(unsafe) because this whole enum runs on one thread before the app

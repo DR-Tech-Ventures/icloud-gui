@@ -57,7 +57,11 @@ else
     security set-keychain-settings "$KEYCHAIN"       # no auto-lock timeout
     security unlock-keychain -p "$PASSWORD" "$KEYCHAIN"
 fi
-security import "$TMP/id.p12" -k "$KEYCHAIN" -P "$PASSWORD" -T /usr/bin/codesign -A
+# -T names codesign as the one tool allowed to use this key. No -A: that would allow
+# ANY application to use it without prompting, which makes the -T beside it meaningless.
+# codesign is the only thing that ever needs it, and set-key-partition-list below is
+# what keeps that access prompt-free.
+security import "$TMP/id.p12" -k "$KEYCHAIN" -P "$PASSWORD" -T /usr/bin/codesign
 
 # We own this keychain and its password, so codesign can be authorised without a prompt.
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$PASSWORD" "$KEYCHAIN" >/dev/null 2>&1

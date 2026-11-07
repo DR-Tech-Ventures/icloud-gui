@@ -8,6 +8,13 @@ on:
     tags: ["v*"]
   pull_request:
 
+# The repository's default workflow token is already read-only, but that is a setting in
+# the web UI: flipping it to read-and-write silently widens every workflow in the repo
+# at once. Stating it here pins it to the file, where a change shows up in a diff.
+# This workflow compiles and asserts; it writes nothing back to GitHub.
+permissions:
+  contents: read
+
 jobs:
   build:
     # Pinned rather than macos-latest, so a runner image rolling forward cannot break a
@@ -27,7 +34,14 @@ jobs:
       # Pinned to the commit rather than the tag: a tag is mutable, so `@v7` runs
       # whatever that tag points at on the day the workflow runs. Dependabot keeps the
       # SHA and the version comment on that line in step with each other.
+      #
+      # persist-credentials: false because nothing after this step uses git -- the
+      # default leaves the token in .git/config for the rest of the job, readable by
+      # anything the build runs. There is nothing third-party in this job to read it
+      # today, which is the cheapest moment to stop leaving it lying there.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Show toolchain
         run: swift --version

@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.3.2
+
+**Hardening, from an audit that found no vulnerabilities.** Nothing here fixes a bug you
+could hit. Three places were doing more than they needed to, and all three are cheaper to
+narrow now than to explain later.
+
+- **"Check for Updates…" now refuses a release page that is not on GitHub.** The URL it
+  opens came out of the JSON reply and went straight to `NSWorkspace.shared.open`, which
+  hands whatever it is given to LaunchServices — a `file:///` path or a registered app
+  scheme included. It took breaking TLS to put a hostile value there, so this was never
+  a live hole; but the scheme and host are now checked instead of assumed, and a reply
+  that names anywhere else is reported as not having come from GitHub. The self-check
+  covers the lookalike cases (`github.com.evil.example`, `github.com` in the path).
+- **CI states its own token permissions.** The repository default is already read-only,
+  but that is a setting in the web UI rather than a line in the workflow, so flipping it
+  would quietly widen every job at once. `permissions: contents: read` now lives in
+  `ci.yml`, where a change to it appears in a diff. The checkout also runs with
+  `persist-credentials: false`: nothing after it uses git, and the default left the token
+  sitting in `.git/config` for the rest of the job.
+- **`setup-signing.sh` no longer imports the local signing key with `-A`.** That flag lets
+  any application use the key without prompting, which made the `-T /usr/bin/codesign`
+  next to it meaningless. codesign is the only thing that ever needs it. The certificate
+  is self-signed and local, so nothing signed with it was ever distributable — the key
+  simply had wider reach than the one tool that uses it. Builds are unaffected.
+
 ## 1.3.1
 
 **The toolbar stops shifting when you change album.**
