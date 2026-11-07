@@ -39,6 +39,24 @@ enum Updates {
         normalise(candidate).compare(normalise(current), options: .numeric) == .orderedDescending
     }
 
+    /// The release page to open, or nil if the response named somewhere else.
+    ///
+    /// `html_url` is a string out of a JSON body that ends up at
+    /// `NSWorkspace.shared.open`, which hands whatever it is given to LaunchServices --
+    /// `file:///` and registered app schemes included. Nothing but GitHub should get to
+    /// choose what this app launches, so the scheme and host are checked rather than
+    /// assumed. It takes breaking TLS to put a hostile value here, which is precisely
+    /// why the check is a guard and not a dialog: there is no legitimate case where
+    /// GitHub's own API answers with a non-GitHub URL, so the honest move is to refuse.
+    static func releasePage(_ string: String) -> URL? {
+        guard let url = URL(string: string),
+              url.scheme?.lowercased() == "https",
+              let host = url.host?.lowercased(),
+              host == "github.com" || host.hasSuffix(".github.com")
+        else { return nil }
+        return url
+    }
+
     // MARK: - The menu item
 
     @MainActor
@@ -101,18 +119,24 @@ enum Updates {
             throw Failure.server((response as? HTTPURLResponse)?.statusCode ?? -1)
         }
         let release = try JSONDecoder().decode(Release.self, from: data)
-        guard let page = URL(string: release.html_url) else { throw Failure.noReleases }
+        guard let page = releasePage(release.html_url) else { throw Failure.untrustedPage }
         return (release.tag_name, page)
     }
 
     enum Failure: LocalizedError {
         case noReleases
         case server(Int)
+        case untrustedPage
 
         var errorDescription: String? {
             switch self {
             case .noReleases: return "No published releases were found."
             case .server(let code): return "GitHub replied with HTTP \(code)."
+            // Its own case rather than folding into noReleases: "no releases found" for
+            // a reply that did not come from GitHub sends anyone debugging it to the
+            // wrong place entirely.
+            case .untrustedPage:
+                return "The reply did not come from GitHub and was ignored."
             }
         }
     }

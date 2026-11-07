@@ -29,6 +29,9 @@ Worth knowing when judging whether something is a security issue. The app:
   library is sent, nothing is downloaded or installed, and the request is never made on
   a timer or at launch. Never using that menu item means the app makes no requests of
   its own at all. All other iCloud traffic is PhotoKit's, inside Apple's frameworks.
+  The release page offered by that reply is checked to be an `https` URL on `github.com`
+  before the app will open it, so a reply from anywhere else cannot choose what gets
+  launched.
 - Has **no analytics, telemetry, crash reporting, or third-party dependencies.** There
   is deliberately no Sentry-style reporter: crash payloads from this app would carry file
   paths, which here means album names, photo filenames and your home directory. macOS
