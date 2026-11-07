@@ -158,8 +158,8 @@ enum Probe {
             if asset.isFavorite { favorites += 1 }
             if asset.creationDate == nil { noDate += 1 }
             if asset.location != nil { withLocation += 1 }
-            guard let name = PHAssetResource.assetResources(for: asset).first?.originalFilename
-            else { return }
+            guard let first = PHAssetResource.assetResources(for: asset).first else { return }
+            let name = resourceFilename(first)
             let base = (name as NSString).deletingPathExtension
             // 8-4-4-4-12 hex == a UUID standing in for a real filename
             if base.count == 36, base.filter({ $0 == "-" }).count == 4 {
