@@ -202,43 +202,73 @@ enum SelfCheck {
 
     // MARK: - Incremental download
 
+    /// Shorthand so the assertions below stay about the ledger rule rather than about
+    /// constructing `PlannedFile`. Sizes do not enter into that rule, hence nil.
+    private static func planned(_ paths: String...) -> [PlannedFile] {
+        paths.map { PlannedFile(path: $0, bytes: nil) }
+    }
+
     private static func checkIncremental() {
         let existing: Set<String> = ["2024/2024-03-15/IMG_1.HEIC"]
 
         // Ledger knows the asset -> nothing to do, and `planned` is never evaluated.
         var plannedWasCalled = false
-        let done = missingPaths(recorded: ["2024/2024-03-15/IMG_1.HEIC"],
-                                planned: { plannedWasCalled = true; return ["x"] }(),
+        let done = missingFiles(recorded: ["2024/2024-03-15/IMG_1.HEIC"],
+                                planned: { plannedWasCalled = true; return planned("x") }(),
                                 existing: existing)
         expect(done.isEmpty, "ledger hit -> nothing missing")
         expect(!plannedWasCalled, "fast path must not query PhotoKit")
 
         // No ledger entry, file already there -> treat as done (legacy fallback).
-        expect(missingPaths(recorded: [],
-                            planned: ["2024/2024-03-15/IMG_1.HEIC"],
+        expect(missingFiles(recorded: [],
+                            planned: planned("2024/2024-03-15/IMG_1.HEIC"),
                             existing: existing).isEmpty,
                "fallback matches an existing filename")
 
         // No ledger entry, file absent -> needs download.
-        expect(missingPaths(recorded: [],
-                            planned: ["2024/2024-03-15/IMG_9.HEIC"],
-                            existing: existing) == ["2024/2024-03-15/IMG_9.HEIC"],
+        expect(missingFiles(recorded: [],
+                            planned: planned("2024/2024-03-15/IMG_9.HEIC"),
+                            existing: existing).map(\.path) == ["2024/2024-03-15/IMG_9.HEIC"],
                "fallback reports a genuinely missing file")
 
         // THE COLLISION CASE. Two different photos, both named IMG_1.HEIC, same day.
         // Filename matching alone says the second is already downloaded -- it is not.
         let bothOnDisk: Set<String> = ["2024/2024-03-15/IMG_1.HEIC",
                                        "2024/2024-03-15/IMG_1 (2).HEIC"]
-        expect(missingPaths(recorded: [], planned: ["2024/2024-03-15/IMG_1.HEIC"],
+        expect(missingFiles(recorded: [], planned: planned("2024/2024-03-15/IMG_1.HEIC"),
                             existing: bothOnDisk).isEmpty,
                "without a ledger, photo B is wrongly considered present")
-        expect(missingPaths(recorded: ["2024/2024-03-15/IMG_1 (2).HEIC"],
-                            planned: ["2024/2024-03-15/IMG_1.HEIC"],
+        expect(missingFiles(recorded: ["2024/2024-03-15/IMG_1 (2).HEIC"],
+                            planned: planned("2024/2024-03-15/IMG_1.HEIC"),
                             existing: bothOnDisk).isEmpty,
                "with a ledger, photo B is correctly matched to its own file")
 
         checkLedgerRoundTrip()
         checkRunLog()
+        checkPlanSizes()
+    }
+
+    /// `PHAssetResource.dataSize` is nil until a resource is local, which for an
+    /// iCloud-only library is most of them. What must never happen is a partial total
+    /// presented as a whole one, so that is what these assert.
+    private static func checkPlanSizes() {
+        var sized = IncrementalPlan()
+        sized.newBytes = 3_000_000_000
+        expect(sized.isSizeComplete, "no unsized files -> the total is the total")
+        expect(describeNewBytes(sized) == "3 GB", "a complete total reads plainly, got \(describeNewBytes(sized) ?? "nil")")
+
+        var partial = sized
+        partial.unsizedCount = 1
+        expect(!partial.isSizeComplete, "one unsized file makes the total a floor")
+        expect(describeNewBytes(partial)?.hasPrefix("at least ") == true,
+               "a floor must say so, got \(describeNewBytes(partial) ?? "nil")")
+
+        // Nothing to fetch, or nothing PhotoKit could size: say nothing rather than 0 bytes.
+        expect(describeNewBytes(IncrementalPlan()) == nil, "an empty plan has no size to show")
+        var allUnsized = IncrementalPlan()
+        allUnsized.unsizedCount = 12
+        expect(describeNewBytes(allUnsized) == nil,
+               "every size unknown -> no figure at all, not \"at least 0 bytes\"")
     }
 
     private static func checkLedgerRoundTrip() {
@@ -266,10 +296,10 @@ enum SelfCheck {
         expect(pruned.paths(for: "A").count == 2, "rows for surviving files are kept")
         expect(DownloadLedger(destination: dir).paths(for: "B").isEmpty,
                "prune is persisted, not just in memory")
-        expect(missingPaths(recorded: pruned.paths(for: "B"),
-                            planned: ["2024/2024-03-15/IMG_1 (2).HEIC"],
+        expect(missingFiles(recorded: pruned.paths(for: "B"),
+                            planned: planned("2024/2024-03-15/IMG_1 (2).HEIC"),
                             existing: ["2024/2024-03-15/IMG_1.HEIC"])
-               == ["2024/2024-03-15/IMG_1 (2).HEIC"],
+               .map(\.path) == ["2024/2024-03-15/IMG_1 (2).HEIC"],
                "a deleted photo is re-fetched after pruning")
     }
 

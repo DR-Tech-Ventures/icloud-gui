@@ -424,12 +424,21 @@ struct ContentView: View {
                 .font(.callout).foregroundStyle(.secondary).lineLimit(1)
         }
         if let root = dest.url, let free = availableBytes(at: root) {
+            // A known shortfall beats a fixed threshold: 25 GB free is ample for a 3 GB
+            // run and hopeless for a 200 GB one. Only the bytes PhotoKit actually
+            // reported are compared, so this speaks up when it is certain the run cannot
+            // fit and stays quiet when the sizes are partial. It never says a run WILL
+            // fit -- with sizes missing that is not something it can know, and a backup
+            // tool guessing in the reassuring direction is the failure that matters.
+            let willNotFit = (dest.plan?.newBytes ?? 0) > free
             Text("· " + ByteCountFormatter.string(fromByteCount: free, countStyle: .file)
-                 + " free")
+                 + (willNotFit ? " free — not enough" : " free"))
                 .font(.callout)
                 // Under 25 GB will not hold a typical library.
-                .foregroundStyle(free < 25_000_000_000 ? .orange : .secondary)
-                .help("Space left on this volume. A full photo library commonly runs to several hundred gigabytes.")
+                .foregroundStyle(willNotFit ? .red : (free < 25_000_000_000 ? .orange : .secondary))
+                .help(willNotFit
+                      ? "The files still to download are larger than the space left on this volume."
+                      : "Space left on this volume. A full photo library commonly runs to several hundred gigabytes.")
                 .fixedSize()
         }
     }

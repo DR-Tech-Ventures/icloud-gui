@@ -16,7 +16,7 @@ APP="build/${APP_NAME}.app"
 #
 # This was load-bearing when the target was macOS 14 -- the linked-on-or-after check
 # that gates Liquid Glass read the stamped value, saw 14.0 and served the old
-# appearance. At a macOS 26 target the design applies either way. It is kept because a
+# appearance. At a macOS 26+ target the design applies either way. It is kept because a
 # binary should say which SDK built it: that is what every other linked-on-or-after
 # check in the OS reads, and the next one will not announce itself either.
 SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
@@ -110,8 +110,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 ${ICON_NAME}
     <key>CFBundleIdentifier</key>        <string>${BUNDLE_ID}</string>
     <key>CFBundlePackageType</key>       <string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>1.3.2</string>
-    <key>CFBundleVersion</key>           <string>6</string>
+    <key>CFBundleShortVersionString</key><string>1.4</string>
+    <key>CFBundleVersion</key>           <string>7</string>
     <key>LSMinimumSystemVersion</key>    <string>${MIN_VERSION}</string>
     <key>NSHighResolutionCapable</key>   <true/>
     <key>NSHumanReadableCopyright</key>

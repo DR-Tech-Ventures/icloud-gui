@@ -9,7 +9,7 @@ cd icloud-gui
 ./run.sh             # build and launch
 ```
 
-You need macOS 26+ and the Xcode command line tools. There are **no third-party
+You need macOS 27+ and the Xcode command line tools. There are **no third-party
 dependencies** and no Xcode project — `swift build` plus a shell script that assembles
 the `.app`. Please keep it that way unless there is a strong reason not to.
 
@@ -197,9 +197,22 @@ These were each found the hard way. The comments in the code say so too.
 there, stamps it into the binary as `minos` and writes it to `LSMinimumSystemVersion`, so
 there is nothing to keep in sync by hand.
 
-It is macOS 26. Lowering it again is not a one-line change: `ToolbarSpacer` in
-`ContentView.swift` needs the macOS 26 SDK, and Swift 6 language mode is on. Raising it
-further is free.
+It is macOS 27, and `swift-tools-version` is 6.4 because `.v27` does not exist in
+PackageDescription before that.
+
+Lowering it is not a one-line change. Back to 26 you would lose
+`PHAssetResource.filename` and `.dataSize`, which are macOS 27 API — `filename` has a
+fallback in `ResourcePlan.swift` and `dataSize` does not, so the size estimate would have
+to go. Below 26, `ToolbarSpacer` in `ContentView.swift` needs the macOS 26 SDK, Swift 6
+language mode is on, and `--shot` depends on ScreenCaptureKit because
+`CGWindowListCreateImage` is unavailable at a 26 target. Raising it further is free.
+
+One thing a raise is *not* free of: `PHAssetResource.originalFilename` is deprecated at a
+27 target, and `resourceFilename` in `ResourcePlan.swift` still calls it as the fallback
+for `filename`, which is optional. That is the single deliberate deprecation warning in
+the build. Do not silence it by inventing a filename — the ledger keys on the path that
+was written, so a name that changes between versions makes every already-downloaded photo
+look missing and re-downloads it as a duplicate.
 
 ## Where the logs are
 

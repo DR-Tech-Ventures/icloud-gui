@@ -1,21 +1,35 @@
 import Foundation
 import Photos
 
-/// Every relative path one asset should produce, given the current options.
+/// A file an asset should produce: where it goes, and how big it is if PhotoKit knows.
+struct PlannedFile: Equatable {
+    let path: String
+    /// `PHAssetResource.dataSize`, new in macOS 27. Apple documents it as nil until the
+    /// resource's "download/processing is complete" -- which for the iCloud-only assets
+    /// this app exists to fetch is the common case, not the exception. Kept optional and
+    /// counted separately rather than coerced to zero: a total that treats unknown as
+    /// nothing is a total that cheerfully says a 200 GB run fits in 10 GB.
+    let bytes: Int64?
+}
+
+/// Every file one asset should produce, given the current options.
 /// Shared by the analyzer and the downloader so they can never disagree.
-func plannedPaths(for asset: PHAsset,
+func plannedFiles(for asset: PHAsset,
                   includeUnmodifiedOriginals: Bool,
                   layout: FolderLayout,
-                  datePrefix: Bool) -> [String] {
+                  datePrefix: Bool) -> [PlannedFile] {
     let resources = PHAssetResource.assetResources(for: asset)
     return planResources(types: resources.map(\.type),
                          includeUnmodifiedOriginals: includeUnmodifiedOriginals)
         .map { planned in
-            relativePath(creationDate: asset.creationDate,
-                         filename: resources[planned.index].originalFilename,
-                         role: planned.role,
-                         layout: layout,
-                         datePrefix: datePrefix)
+            let resource = resources[planned.index]
+            return PlannedFile(
+                path: relativePath(creationDate: asset.creationDate,
+                                   filename: resourceFilename(resource),
+                                   role: planned.role,
+                                   layout: layout,
+                                   datePrefix: datePrefix),
+                bytes: resource.dataSize.map(Int64.init))
         }
 }
 
@@ -243,11 +257,32 @@ struct IncrementalPlan {
     var newAssets: [PHAsset] = []
     var completeCount = 0
     var newFileCount = 0
+    /// Bytes among the files still to fetch that PhotoKit could size.
+    var newBytes: Int64 = 0
+    /// Files it could not, so `newBytes` is a floor and not a total.
+    var unsizedCount = 0
 
     var isEmpty: Bool { newAssets.isEmpty }
+
+    /// True when every missing file reported a size, so `newBytes` is the whole job
+    /// rather than a lower bound. Anything shown to the user has to say which it is.
+    var isSizeComplete: Bool { unsizedCount == 0 }
 }
 
-/// Paths this asset still needs; empty means the destination already has it.
+/// How big the remaining download is, in words, or nil when there is nothing to say.
+///
+/// A free function rather than a method on the view model so the one rule that matters
+/// here -- a floor is never presented as a total -- is assertable without a main actor
+/// or a photo library.
+func describeNewBytes(_ plan: IncrementalPlan) -> String? {
+    guard plan.newBytes > 0 else { return nil }
+    let size = ByteCountFormatter.string(fromByteCount: plan.newBytes, countStyle: .file)
+    // "at least" when PhotoKit could not size every file. Presenting a floor as a total
+    // is how a disk fills up two hours into a run that said it would fit.
+    return plan.isSizeComplete ? size : "at least \(size)"
+}
+
+/// Files this asset still needs; empty means the destination already has it.
 ///
 /// `recorded` must already be pruned to files that exist, so a non-empty value means
 /// the ledger positively identifies this asset's files -- exactly the question a
@@ -255,11 +290,11 @@ struct IncrementalPlan {
 /// matching planned filenames, which cannot distinguish two same-named photos in one
 /// day folder. `planned` is an autoclosure so that fallback stays unevaluated on the
 /// fast path, where it would cost a PhotoKit query per asset.
-func missingPaths(recorded: [String],
-                  planned: @autoclosure () -> [String],
-                  existing: Set<String>) -> [String] {
+func missingFiles(recorded: [String],
+                  planned: @autoclosure () -> [PlannedFile],
+                  existing: Set<String>) -> [PlannedFile] {
     guard recorded.isEmpty else { return [] }
-    return planned().filter { !existing.contains($0) }
+    return planned().filter { !existing.contains($0.path) }
 }
 
 /// Decides, per asset, whether the destination already holds every file it should produce.
@@ -282,9 +317,9 @@ func analyzeIncremental(
     for (offset, asset) in assets.enumerated() {
         if offset % 250 == 0 { onProgress(offset) }
 
-        let missing = missingPaths(
+        let missing = missingFiles(
             recorded: ledger.paths(for: asset.localIdentifier),
-            planned: plannedPaths(for: asset,
+            planned: plannedFiles(for: asset,
                                   includeUnmodifiedOriginals: includeUnmodifiedOriginals,
                                   layout: layout,
                                   datePrefix: datePrefix),
@@ -295,6 +330,13 @@ func analyzeIncremental(
         } else {
             plan.newAssets.append(asset)
             plan.newFileCount += missing.count
+            for file in missing {
+                if let bytes = file.bytes {
+                    plan.newBytes += bytes
+                } else {
+                    plan.unsizedCount += 1
+                }
+            }
         }
     }
     onProgress(assets.count)
@@ -364,9 +406,14 @@ final class DestinationModel: ObservableObject {
     private static func describe(_ plan: IncrementalPlan) -> String {
         if plan.isEmpty { return "Everything here is already downloaded." }
         var text = "\(plan.newAssets.count.formatted()) new"
+
+        var detail: [String] = []
         if plan.newFileCount != plan.newAssets.count {
-            text += " (\(plan.newFileCount.formatted()) files)"
+            detail.append("\(plan.newFileCount.formatted()) files")
         }
+        if let size = describeNewBytes(plan) { detail.append(size) }
+        if !detail.isEmpty { text += " (\(detail.joined(separator: ", ")))" }
+
         if plan.completeCount > 0 {
             text += " · \(plan.completeCount.formatted()) already downloaded"
         }
