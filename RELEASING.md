@@ -39,14 +39,20 @@ friction.
 
 ## Option 2 — signed and notarised releases ($99/year)
 
-The only way to offer a download that just works. Once set up, the whole thing is:
+The only way to offer a download that just works. Once set up, a whole release is one
+command:
 
 ```bash
-./release.sh
+./ship.sh
 ```
 
-`release.sh` refuses to run until each prerequisite is in place and tells you which one
-is missing, so you can run it at any point to see where you stand.
+That signs and notarises, publishes the GitHub release with notes from the changelog,
+and bumps the Homebrew cask — see [Step 6](#step-6--ship-it).
+
+`release.sh`, which `ship.sh` calls for the signing, refuses to run until each
+prerequisite is in place and tells you which one is missing, so you can run either at
+any point to see where you stand. `./ship.sh --dry-run` runs every check and prints what
+it would publish without touching Apple, GitHub or the tap.
 
 ### Step 1 — confirm you have a *paid* membership
 
@@ -120,23 +126,60 @@ image are separate artifacts with separate signatures, and a notarised app insid
 un-notarised container still makes Gatekeeper check online at first launch, which fails
 on a machine that happens to be offline.
 
-### Step 6 — publish it
-
-`release.sh` leaves the distributable at **`build/iCloud-GUI.dmg`**. Attach it to a
-GitHub Release:
+### Step 6 — ship it
 
 ```bash
-gh release create v1.2 "build/iCloud-GUI.dmg" \
-   --repo DR-Tech-Ventures/icloud-gui \
-   --title "iCloud GUI 1.2" \
-   --notes "Download your iCloud photos to a Mac or NAS. Signed and notarised by Apple, so it opens without any Gatekeeper warnings."
+./ship.sh
 ```
 
-Keep the tag matching `CFBundleShortVersionString` in `build.sh` — `release.sh` refuses
-to build a version that is already tagged, and that check is what stops two different
-builds going out under one version number.
+A release lands in three places, and `ship.sh` does all three from one command:
+
+1. **This repository.** Runs `release.sh` (sign, notarise, staple, package, notarise the
+   disk image), then `gh release create` — which is also what creates the `v$VERSION`
+   tag — attaching `build/iCloud-GUI.dmg`.
+2. **The Homebrew tap.** Rewrites `version` and `sha256` in
+   `Casks/icloud-gui.rb`, commits and pushes. The hash is taken from the disk image just
+   notarised rather than from a re-download of the published one: same bytes, and the
+   cask cannot end up describing an artifact we never built.
+3. **The website — nothing to do.** `app/lib/release.ts` on the marketing site reads the
+   version and the DMG size from the GitHub releases API when the page renders, so
+   publishing the release *is* the website update. It appears within the hour, when the
+   page's cache revalidates. There is nothing to deploy and no version to bump.
+
+Release notes come from the `## $VERSION` section of `CHANGELOG.md`, so what shipped is
+described in one place rather than typed a second time into a `gh` command.
+
+Everything is checked before the first round trip to Apple — on `main`, clean tree, in
+sync with `origin`, version not already tagged, changelog section present, tap checkout
+present and clean. Finding a missing changelog section after notarisation wastes several
+minutes, so it is found first.
+
+```bash
+./ship.sh --dry-run       # every check, plus the notes and cask edit it would make
+./ship.sh --publish-only  # an already-notarised DMG failed at the publish step
+```
+
+`--publish-only` matters on a retry: notarisation is two round trips to Apple, and a
+failure in the publish step should not pay for them twice.
+
+`TAP_DIR` defaults to `../homebrew-tap` and overrides where the tap clone lives. Point it
+at your own checkout, **not** `/opt/homebrew/Library/Taps/dr-tech-ventures/homebrew-tap`
+— `brew update` resets that one, so a commit pushed from it can disappear.
+
+The version itself is not bumped by `ship.sh`. `main` is protected, so
+`CFBundleShortVersionString` and `CFBundleVersion` in `build.sh`, plus the new
+`CHANGELOG.md` section, go through a pull request with CI green first. `ship.sh` then
+ships whatever version `main` says.
 
 `build/` is gitignored — release binaries are attached to the release, never committed.
+
+#### What still needs doing by hand
+
+- **A change to the minimum macOS.** Three strings on the product page
+  (`app/products/icloud-gui/page.tsx`: the hero meta line, `operatingSystem` in the
+  JSON-LD, and the requirements FAQ) and `depends_on macos:` in the cask. Not a
+  per-release job — only when the floor moves.
+- **Testing the Photos prompt** on a clean macOS user account.
 
 ### Why you cannot just zip a development build
 
@@ -166,9 +209,11 @@ this short of asking every user to strip the quarantine attribute by hand — se
   Resource Access entitlement for the photo library. It is harmless if redundant. If the
   prompt fails to appear, this is the first thing to try toggling.
 
-### Why releases are not automated
+### Why the signing is not automated
 
-**They are cut by hand, from a Mac. This is deliberate.**
+**The signing is done by hand, from a Mac. This is deliberate.** `ship.sh` automates
+everything *around* it — the tag, the release, its notes, the cask — and deliberately
+nothing that would require the Developer ID key to leave this machine.
 
 CI builds every push, pull request and tag, and runs the assertions — but it never
 signs or notarises. The artifact it produces is ad-hoc signed and thrown away, because
@@ -181,10 +226,16 @@ the org, and if it leaks an attacker can sign software macOS will trust as us �
 revoking it invalidates our ability to sign until a replacement is issued, and Apple
 caps how many a team may hold.
 
-For an occasional release by one maintainer, `./release.sh` already does the whole
-sequence in a single command in a few minutes. The automation would buy convenience we
-do not need in exchange for copying the signing identity somewhere it does not have to
-be.
+For an occasional release by one maintainer, `./ship.sh` already does the whole sequence
+in a single command in a few minutes, and it needs no secrets at all: it uses the
+Developer ID certificate in the local keychain, the notarytool profile in the local
+keychain, and whatever `gh` and `git` are already authenticated as. The automation would
+buy convenience we do not need in exchange for copying the signing identity somewhere it
+does not have to be.
+
+The same reasoning rules out bumping the cask from CI. A workflow in the tap triggered by
+a release here would need a cross-repository token with write access to the tap stored as
+a secret; `ship.sh` does it locally, at the moment the DMG exists, with none.
 
 **Revisit this if** someone else needs to cut releases, or releases become frequent
 enough that the manual step is real friction. The workflow would import a base64 `.p12`
@@ -234,9 +285,19 @@ impossible.
 
 ## Release checklist
 
-- [ ] The change merged to `main` through a pull request with CI green
+Through a pull request, with CI green:
+
+- [ ] The change itself merged to `main`
 - [ ] `./run.sh --self-check` passes
-- [ ] Bump `CFBundleShortVersionString` and `CFBundleVersion` in `build.sh`
-- [ ] Tag the release
-- [ ] If shipping a binary: signed, notarised, stapled, and `spctl` verified
+- [ ] `CFBundleShortVersionString` and `CFBundleVersion` bumped in `build.sh`
+- [ ] A `## <version>` section added to `CHANGELOG.md` — this becomes the release notes
+- [ ] If the minimum macOS moved: `depends_on macos:` in the cask, and the three
+      requirement strings on the product page
+
+Then, from a clean `main`:
+
+- [ ] `./ship.sh --dry-run` looks right
+- [ ] `./ship.sh` — tags, notarises, publishes, bumps the tap
+- [ ] `brew update && brew install --cask dr-tech-ventures/tap/icloud-gui` works
 - [ ] Photos prompt tested on a clean user account
+- [ ] The product page shows the new version within the hour (it needs no deploy)
