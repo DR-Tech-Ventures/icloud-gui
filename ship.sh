@@ -15,8 +15,9 @@
 # revalidates. Only a change to the minimum macOS needs the site edited by hand, and
 # that is an OS-bump job, not a per-release one.
 #
-# TAP_DIR overrides where the tap checkout lives. It must be your own clone --
-# NOT /opt/homebrew/Library/Taps/..., which `brew update` resets.
+# TAP_DIR overrides where the tap checkout lives. It must be your own clone, not the one
+# under `brew --repository` that `brew update` resets -- that is enforced below, not just
+# asked for.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -103,6 +104,29 @@ Set TAP_DIR to your homebrew-tap clone, e.g.
 Do not point it at /opt/homebrew/Library/Taps/... -- brew update resets that clone."
 git -C "$TAP_DIR" remote get-url origin | grep -qi 'homebrew-tap' \
     || die "$TAP_DIR does not look like the homebrew-tap repository."
+
+# Homebrew's own checkout is out of bounds, and this is a check rather than the note
+# above it because every other test passes on that directory: the cask is there, the
+# origin URL matches, it sits on main and it is clean. `brew update` resets anything
+# under there, so a cask committed in it can be thrown away before anyone installs from
+# it, or collide with brew's own fetch part-way through a release. A constraint that only
+# exists in a comment is the weakest kind.
+#
+# Resolved with `pwd -P` on both sides, since a relative TAP_DIR or a symlink would walk
+# straight past a string comparison -- /usr/local is itself a symlink on some machines.
+if BREW_REPO="$(brew --repository 2>/dev/null)" && [ -n "$BREW_REPO" ] && [ -d "$BREW_REPO" ]; then
+    BREW_REAL="$(cd "$BREW_REPO" && pwd -P)"
+    TAP_REAL="$(cd "$TAP_DIR" && pwd -P)"
+    case "$TAP_REAL/" in
+        "$BREW_REAL"/*)
+            die "TAP_DIR is inside Homebrew's own checkout:
+  $TAP_REAL
+
+brew update resets that clone, so a cask bumped there can be discarded before
+anyone installs from it. Point TAP_DIR at your own clone instead:
+  TAP_DIR=~/Documents/GitHub/homebrew-tap ./ship.sh" ;;
+    esac
+fi
 [ -z "$(git -C "$TAP_DIR" status --porcelain)" ] \
     || die "The tap checkout at $TAP_DIR is dirty. Commit or discard first."
 TAP_BRANCH="$(git -C "$TAP_DIR" rev-parse --abbrev-ref HEAD)"
